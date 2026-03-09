@@ -148,15 +148,9 @@ class User(db.Model, UserMixin):
     _name = db.Column(db.String(255), unique=False, nullable=False)
     _uid = db.Column(db.String(255), unique=True, nullable=False)
     _email = db.Column(db.String(255), unique=False, nullable=False)
-    _sid = db.Column(db.String(255), unique=False, nullable=True)
     _password = db.Column(db.String(255), unique=False, nullable=False)
     _role = db.Column(db.String(20), default="User", nullable=False)
     _pfp = db.Column(db.String(255), unique=False, nullable=True)
-    kasm_server_needed = db.Column(db.Boolean, default=False)
-    _grade_data = db.Column(db.JSON, unique=False, nullable=True)
-    _ap_exam = db.Column(db.JSON, unique=False, nullable=True)
-    _class = db.Column(db.JSON, unique=False, nullable=True)
-    _school = db.Column(db.String(255), default="Unknown", nullable=True)
 
     # Define many-to-many relationship with Section model through UserSection table
     # Overlaps setting silences SQLAlchemy warnings about multiple relationship paths
@@ -174,17 +168,9 @@ class User(db.Model, UserMixin):
         self._name = name
         self._uid = uid
         self._email = "?"
-        self._sid = sid
         self.set_password(password)
-        self.kasm_server_needed = kasm_server_needed
         self._role = role
         self._pfp = pfp
-        self._grade_data = grade_data if grade_data else {}
-        self._ap_exam = ap_exam if ap_exam else {}
-        # _class stores a list of class abbreviations the user belongs to (e.g. CSSE, CSP, CSA)
-        # keep it as a JSON column in the DB
-        self._class = classes if classes is not None else []
-        self._school = school
 
     # UserMixin/Flask-Login requires a get_id method to return the id as a string
     def get_id(self):
@@ -309,37 +295,6 @@ class User(db.Model, UserMixin):
     def pfp(self, pfp):
         self._pfp = pfp
 
-    @property
-    def grade_data(self):
-        """Gets the user's grade data."""
-        if self._grade_data is None:
-            return {}
-        return self._grade_data
-
-    @grade_data.setter
-    def grade_data(self, grade_data):
-        """Sets the user's grade data."""
-        self._grade_data = grade_data if grade_data is not None else {}
-
-    @property
-    def ap_exam(self):
-        """Gets the user's AP exam data."""
-        if self._ap_exam is None:
-            return {}
-        return self._ap_exam
-
-    @ap_exam.setter
-    def ap_exam(self, ap_exam):
-        """Sets the user's AP exam data."""
-        self._ap_exam = ap_exam if ap_exam is not None else {}
-
-    @property
-    def school(self):
-        return self._school
-
-    @school.setter
-    def school(self, school):
-        self._school = school
 
     # CRUD create/add a new record to the table
     # returns self or None on error
@@ -362,15 +317,9 @@ class User(db.Model, UserMixin):
             "uid": self.uid,
             "name": self.name,
             "email": self.email,
-            "sid": self.sid,
             "role": self.role,
             "pfp": self.pfp,
-            "class": self._class if self._class is not None else [],
-            "kasm_server_needed": self.kasm_server_needed,
-            "grade_data": self.grade_data,
-            "ap_exam": self.ap_exam,
             "password": self._password,  # Only for internal use, not for API
-            "school": self.school
         }
         sections = self.read_sections()
         data.update(sections)
@@ -387,17 +336,10 @@ class User(db.Model, UserMixin):
         name = inputs.get("name", "")
         uid = inputs.get("uid", "")
         email = inputs.get("email", "")
-        sid = inputs.get("sid", "")
         password = inputs.get("password", "")
         pfp = inputs.get("pfp", None)
-        kasm_server_needed = inputs.get("kasm_server_needed", None)
-        grade_data = inputs.get("grade_data", None)
-        ap_exam = inputs.get("ap_exam", None)
-        class_list = inputs.get("class", None) or inputs.get("_class", None)
-        school = inputs.get("school", None)
         # States before update
         old_uid = self.uid
-        old_kasm_server_needed = self.kasm_server_needed
 
         # Update table with new data
         if name:
@@ -406,26 +348,10 @@ class User(db.Model, UserMixin):
             self.set_uid(uid)
         if email:
             self.email = email
-        if sid:
-            self.sid = sid
         if password:
             self.set_password(password)
         if pfp is not None:
             self.pfp = pfp
-        if kasm_server_needed is not None:
-            self.kasm_server_needed = bool(kasm_server_needed)
-        if grade_data is not None:
-            self.grade_data = grade_data
-        if ap_exam is not None:
-            self.ap_exam = ap_exam
-        if class_list is not None:
-            # Ensure class_list is a list; accept a single string as convenience
-            if isinstance(class_list, str):
-                self._class = [class_list]
-            else:
-                self._class = class_list
-        if school is not None:
-            self.school = school
 
         # Check this on each update
         if not email:
@@ -434,25 +360,6 @@ class User(db.Model, UserMixin):
 
         # Make a KasmUser object to interact with the Kasm API
         # Wrap in try-except to ensure db.session.commit() occurs even if Kasm operations fail
-        try:
-            kasm_user = KasmUser()
-
-            # Update Kasm server group membership if needed
-            if self.kasm_server_needed:
-                # UID has changed, delete old Kasm user if it exists
-                if old_uid != self.uid:
-                    kasm_user.delete(old_uid)
-                # Create or update the user in Kasm, including a password
-                kasm_user.post(self.name, self.uid, password if password else app.config["DEFAULT_PASSWORD"])
-                # User is transtioning from non-Kasm to Kasm user, thus it requires posting all groups to Kasm
-                if not old_kasm_server_needed:
-                    kasm_user.post_groups(self.uid, [section.abbreviation for section in self.sections])
-            # User is transitioning from Kasm user to non-Kasm user, thus it requires cleanup of defunct Kasm user
-            elif old_kasm_server_needed:
-                kasm_user.delete(self.uid)
-        except Exception as e:
-            # Log the error but continue to db.session.commit()
-            print(f"Kasm API error for user {self.uid}: {e}")
 
         try:
             db.session.commit()

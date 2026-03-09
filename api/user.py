@@ -96,10 +96,6 @@ class UserAPI:
             if uid is None or len(uid) < 2:
                 return {'message': f'User ID is missing, or is less than 2 characters'}, 400
           
-            # check if uid is a GitHub account
-            _, status = GitHubUser().get(uid)
-            if status != 200:
-                return {'message': f'User ID {uid} not a valid GitHub account' }, 404
             
             ''' User object creation '''
             #1: Setup minimal User object using __init__ method
@@ -251,12 +247,7 @@ class UserAPI:
             else:
                 # Non-admin can only update themselves
                 user = current_user
-                
-            # Accounts are desired to be GitHub accounts, change must be validated 
-            if body.get('uid') and body.get('uid') != user._uid:
-                _, status = GitHubUser().get(body.get('uid'))
-                if status != 200:
-                    return {'message': f'User ID {body.get("uid")} not a valid GitHub account' }, 404
+            
             
             # Update the User object to the database using custom update method
             user.update(body)
@@ -663,67 +654,57 @@ class UserAPI:
 
         def post(self):
             """
-            Create a new guest user account.
-
-            Accepts only username (uid) and password. Auto-generates required fields.
-            No GitHub validation required for guest accounts.
-
-            Returns:
-                JSON response with the created user details or an error message.
+            Create a new user.
+            Required fields: name, uid, password, email
             """
-            # Read data from json body
+
             body = request.get_json()
 
-            # Validate uid (username)
+            # Validate name
+            name = body.get('name')
+            if name is None or len(name) < 2:
+                return {'message': 'Name is missing or less than 2 characters'}, 400
+
+            # Validate uid (no longer required to be a GitHub username)
             uid = body.get('uid')
             if uid is None or len(uid) < 2:
-                return {'message': 'Username is missing, or is less than 2 characters'}, 400
+                return {'message': 'User ID is missing or less than 2 characters'}, 400
 
-            # Validate password (relaxed requirement for guests)
+            # Validate password
             password = body.get('password')
             if password is None or len(password) < 2:
-                return {'message': 'Password is missing, or is less than 2 characters'}, 400
+                return {'message': 'Password is missing or too short'}, 400
 
-            # Auto-generate required fields for guest accounts
-            name = f"Guest_{uid}"
-            email = "?"
-            sid = "?"
-            school = "?"
+            # Validate email
+            email = body.get('email')
+            if email is None or len(email) < 3:
+                return {'message': 'Email is missing or invalid'}, 400
 
-            # Create User object with auto-generated name
+            # Create user object
             user_obj = User(name=name, uid=uid, password=password)
 
-            # Build cleaned body with all fields filled
             cleaned_body = {
                 'name': name,
                 'uid': uid,
                 'password': password,
-                'email': email,
-                'sid': sid,
-                'school': school,
-                'kasm_server_needed': False
+                'email': email
             }
-            if body.get('class') is not None:
-                cleaned_body['class'] = body.get('class')
 
-            # Create the guest user (skip GitHub validation)
             try:
                 user = user_obj.create(cleaned_body)
 
                 if not user:
-                    # Check if user was actually created in database
                     db_user = User.query.filter_by(_uid=uid).first()
                     if db_user:
                         return jsonify(db_user.read())
                     else:
-                        return {'message': f'Failed to create guest account for {uid}, username may already exist'}, 400
+                        return {'message': f'User {uid} may already exist'}, 400
 
-                # Return the created user details
                 return jsonify(user.read())
 
             except Exception as e:
-                return {'message': f'Error creating guest user: {str(e)}'}, 500
-
+                return {'message': f'Error creating user: {str(e)}'}, 500
+        
     # building RESTapi endpoint
     api.add_resource(_ID, '/id')
     api.add_resource(_BULK, '/users')

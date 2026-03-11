@@ -1,6 +1,74 @@
 {% extends "layouts/base.html" %}
 {% set project = "Home" %}
 
+{% block head %}
+    <script defer src="{{ url_for('static', filename='js/titanic.js') }}"></script>
+{% endblock %}
+
+{% block style %}
+    <style>
+        .feature-panel {
+            background: linear-gradient(135deg, rgba(248, 249, 250, 0.92), rgba(205, 226, 255, 0.88));
+            border: 0;
+            border-radius: 1.25rem;
+            box-shadow: 0 20px 45px rgba(13, 27, 62, 0.18);
+        }
+
+        .feature-panel .card-title,
+        .feature-panel .card-text,
+        .feature-panel label,
+        .feature-panel li,
+        .feature-panel p,
+        .feature-panel h2,
+        .feature-panel h5,
+        .feature-panel h6,
+        .feature-panel span {
+            color: #11213b;
+        }
+
+        .titanic-shell {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(226, 239, 255, 0.82));
+            border-radius: 1.75rem;
+            box-shadow: 0 30px 60px rgba(9, 30, 66, 0.25);
+            overflow: hidden;
+        }
+
+        .titanic-accent {
+            background: radial-gradient(circle at top left, rgba(19, 84, 122, 0.95), rgba(18, 45, 77, 0.96));
+            color: #f5f7fb;
+        }
+
+        .metric-chip {
+            display: inline-block;
+            padding: 0.4rem 0.75rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.18);
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .result-meter {
+            height: 0.85rem;
+            border-radius: 999px;
+            background: rgba(17, 33, 59, 0.12);
+            overflow: hidden;
+        }
+
+        .result-meter span {
+            display: block;
+            height: 100%;
+        }
+
+        .survive-bar {
+            background: linear-gradient(90deg, #1d976c, #93f9b9);
+        }
+
+        .die-bar {
+            background: linear-gradient(90deg, #c33764, #f7b733);
+        }
+    </style>
+{% endblock %}
+
 {% block body %}
     <!-- Start of body content specific to page -->
     <div class="px-5 py-5 mx-auto">
@@ -59,6 +127,111 @@
                 </div>
             </div>
             
+        </div>
+
+        <div class="titanic-shell mt-5">
+            <div class="row g-0">
+                <div class="col-lg-5 titanic-accent p-4 p-lg-5">
+                    <p class="text-uppercase small mb-2">Model • View • Control</p>
+                    <h2 class="display-6 fw-bold">Improve your chances</h2>
+                    <p class="mb-4">This Titanic demo uses a Python model, a Flask API controller, and a JavaScript view to estimate survival odds and suggest historically stronger conditions.</p>
+                    <div class="metric-chip">Held-out accuracy: <strong id="model-accuracy">Loading...</strong></div>
+                    <div class="metric-chip">Top signals: <span id="feature-summary">Loading...</span></div>
+                    <p id="titanic-status" class="text-light-emphasis mt-4 mb-0">Enter a passenger profile to evaluate the baseline scenario.</p>
+                </div>
+                <div class="col-lg-7 p-4 p-lg-5">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="card feature-panel h-100">
+                                <div class="card-body">
+                                    <h5 class="card-title">Passenger profile</h5>
+                                    <form id="titanic-form" class="row g-3">
+                                        <div class="col-sm-6">
+                                            <label for="pclass" class="form-label">Class</label>
+                                            <select class="form-select" id="pclass" name="pclass">
+                                                <option value="1">1st</option>
+                                                <option value="2" selected>2nd</option>
+                                                <option value="3">3rd</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <label for="sex" class="form-label">Sex</label>
+                                            <select class="form-select" id="sex" name="sex">
+                                                <option value="female">Female</option>
+                                                <option value="male" selected>Male</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <label for="age" class="form-label">Age</label>
+                                            <input class="form-control" id="age" name="age" type="number" min="1" max="90" value="30" required>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <label for="fare" class="form-label">Fare</label>
+                                            <input class="form-control" id="fare" name="fare" type="number" min="0" step="0.01" value="25.00" required>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <label for="sibsp" class="form-label">Siblings / spouse</label>
+                                            <input class="form-control" id="sibsp" name="sibsp" type="number" min="0" value="0" required>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <label for="parch" class="form-label">Parents / children</label>
+                                            <input class="form-control" id="parch" name="parch" type="number" min="0" value="0" required>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <label for="embarked" class="form-label">Embarked</label>
+                                            <select class="form-select" id="embarked" name="embarked">
+                                                <option value="C">Cherbourg</option>
+                                                <option value="Q">Queenstown</option>
+                                                <option value="S" selected>Southampton</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <label for="alone" class="form-label">Traveling alone</label>
+                                            <select class="form-select" id="alone" name="alone">
+                                                <option value="true" selected>Yes</option>
+                                                <option value="false">No</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-12">
+                                            <button class="btn btn-primary w-100" type="submit">Estimate survival</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card feature-panel h-100">
+                                <div class="card-body">
+                                    <h5 class="card-title">Prediction</h5>
+                                    <div class="mb-3">
+                                        <div class="d-flex justify-content-between">
+                                            <span>Survive</span>
+                                            <strong id="survive-value">--</strong>
+                                        </div>
+                                        <div class="result-meter mt-2"><span id="survive-bar" class="survive-bar" style="width: 0%"></span></div>
+                                    </div>
+                                    <div class="mb-4">
+                                        <div class="d-flex justify-content-between">
+                                            <span>Die</span>
+                                            <strong id="die-value">--</strong>
+                                        </div>
+                                        <div class="result-meter mt-2"><span id="die-bar" class="die-bar" style="width: 0%"></span></div>
+                                    </div>
+                                    <h6>Top passenger factors</h6>
+                                    <ul id="titanic-factors" class="mb-4">
+                                        <li>Submit the form to see which features helped or hurt this passenger most.</li>
+                                    </ul>
+                                    <h6>Improve your chances</h6>
+                                    <p id="improvement-summary" class="mb-2">The model will suggest historically stronger conditions when they improve the forecast.</p>
+                                    <ul id="titanic-changes" class="mb-0">
+                                        <li>Suggested adjustments will appear here after prediction.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 {% endblock %}

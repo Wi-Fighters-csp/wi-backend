@@ -706,12 +706,10 @@ class UserAPI:
                 return {'message': f'Error creating user: {str(e)}'}, 500
         
     # building RESTapi endpoint
-    api.add_resource(_ID, '/id')
     api.add_resource(_BULK, '/users')
     api.add_resource(_CRUD, '/user')
     api.add_resource(_GuestCRUD, '/user/guest')
     api.add_resource(_Section, '/user/section')
-    api.add_resource(_Security, '/authenticate')
     api.add_resource(_GradeData, '/grade_data')
     api.add_resource(_APExam, '/apexam')
     api.add_resource(_School, '/school')

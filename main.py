@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 # import "objects" from "this" project
 from __init__ import app, db, login_manager  # Key Flask objects 
 # API endpoints
+from api.pso import pso_api
 from api.user import user_api 
 from api.python_exec_api import python_exec_api
 from api.javascript_exec_api import javascript_exec_api
@@ -64,6 +65,7 @@ app.config['KASM_API_KEY_SECRET'] = os.getenv('KASM_API_KEY_SECRET')
 # register URIs for api endpoints
 app.register_blueprint(python_exec_api)
 app.register_blueprint(javascript_exec_api)
+app.register_blueprint(pso_api)
 app.register_blueprint(user_api)
 app.register_blueprint(section_api)
 app.register_blueprint(persona_api)

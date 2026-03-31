@@ -15,6 +15,6 @@ services:
                 image: socket_open
                 build: ./socket
                 ports:
-                        - "8324:8324"
+                        - "8500:8500"
     
                 restart: unless-stopped

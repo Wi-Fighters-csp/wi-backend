@@ -66,6 +66,10 @@ class PSOAuthService:
         return normalized_role
 
     @staticmethod
+    def normalize_member_card_text(value, default=''):
+        return str(value or default).strip()
+
+    @staticmethod
     def ensure_database():
         with PSOAuthService.get_connection() as connection:
             connection.execute(
@@ -144,6 +148,50 @@ class PSOAuthService:
                     FOREIGN KEY (reviewed_by) REFERENCES users(id)
                 )
                 '''
+            )
+            connection.execute(
+                '''
+                CREATE TABLE IF NOT EXISTS member_cards (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    owner_uid TEXT NOT NULL,
+                    owner_name TEXT NOT NULL,
+                    family TEXT NOT NULL,
+                    section_id TEXT NOT NULL,
+                    instrument_title TEXT NOT NULL DEFAULT '',
+                    image_url TEXT NOT NULL DEFAULT '',
+                    bio TEXT NOT NULL DEFAULT '',
+                    created_by_uid TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (owner_uid) REFERENCES users(uid) ON DELETE CASCADE,
+                    FOREIGN KEY (created_by_uid) REFERENCES users(uid) ON DELETE CASCADE
+                )
+                '''
+            )
+            card_columns = {
+                column['name'] for column in connection.execute('PRAGMA table_info(member_cards)').fetchall()
+            }
+            if 'instrument_title' not in card_columns:
+                connection.execute("ALTER TABLE member_cards ADD COLUMN instrument_title TEXT NOT NULL DEFAULT ''")
+            if 'image_url' not in card_columns:
+                connection.execute("ALTER TABLE member_cards ADD COLUMN image_url TEXT NOT NULL DEFAULT ''")
+            if 'bio' not in card_columns:
+                connection.execute("ALTER TABLE member_cards ADD COLUMN bio TEXT NOT NULL DEFAULT ''")
+            if 'created_by_uid' not in card_columns:
+                connection.execute("ALTER TABLE member_cards ADD COLUMN created_by_uid TEXT NOT NULL DEFAULT ''")
+            if 'created_at' not in card_columns:
+                connection.execute("ALTER TABLE member_cards ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP")
+            if 'updated_at' not in card_columns:
+                connection.execute("ALTER TABLE member_cards ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP")
+
+            connection.execute(
+                'CREATE INDEX IF NOT EXISTS idx_member_cards_owner_uid ON member_cards(owner_uid)'
+            )
+            connection.execute(
+                'CREATE INDEX IF NOT EXISTS idx_member_cards_family_section ON member_cards(family, section_id)'
+            )
+            connection.execute(
+                'CREATE UNIQUE INDEX IF NOT EXISTS idx_member_cards_owner_section_unique ON member_cards(owner_uid, family, section_id)'
             )
             connection.commit()
 
@@ -493,12 +541,261 @@ class PSOAuthService:
 
     @staticmethod
     def get_member_request_status(uid):
+        if PSOAuthService.is_member(uid):
+            return 'approved'
         latest_request = PSOAuthService.get_latest_member_request(uid)
         if latest_request is not None:
             return latest_request['status']
-        if PSOAuthService.is_member(uid):
-            return 'approved'
         return 'none'
+
+    @staticmethod
+    def member_profile_payload(uid):
+        member = PSOAuthService.get_member_by_uid(uid)
+        if member is None:
+            return {
+                'instrument': '',
+                'section': '',
+                'practice_time': 0,
+            }
+
+        return {
+            'instrument': str(member.get('instrument') or '').strip(),
+            'section': str(member.get('section') or '').strip(),
+            'practice_time': PSOAuthService.normalize_practice_time(member.get('practice_time')) or 0,
+        }
+
+    @staticmethod
+    def member_card_payload(record):
+        if record is None:
+            return None
+
+        return {
+            'id': record['id'],
+            'owner_uid': record['owner_uid'],
+            'owner_name': record['owner_name'],
+            'family': record['family'],
+            'section_id': record['section_id'],
+            'instrument_title': record['instrument_title'],
+            'image_url': record['image_url'],
+            'bio': record['bio'],
+            'created_by_uid': record['created_by_uid'],
+            'created_at': record['created_at'],
+            'updated_at': record['updated_at'],
+        }
+
+    @staticmethod
+    def get_member_card_by_id(card_id):
+        PSOAuthService.ensure_database()
+        with PSOAuthService.get_connection() as connection:
+            record = connection.execute(
+                '''
+                SELECT id, owner_uid, owner_name, family, section_id, instrument_title,
+                       image_url, bio, created_by_uid, created_at, updated_at
+                FROM member_cards
+                WHERE id = ?
+                ''',
+                (card_id,)
+            ).fetchone()
+
+        return PSOAuthService.member_card_payload(record)
+
+    @staticmethod
+    def list_member_cards(family=None, section_id=None):
+        PSOAuthService.ensure_database()
+        query = (
+            'SELECT id, owner_uid, owner_name, family, section_id, instrument_title, '
+            'image_url, bio, created_by_uid, created_at, updated_at '
+            'FROM member_cards WHERE 1 = 1 '
+        )
+        parameters = []
+
+        normalized_family = PSOAuthService.normalize_member_card_text(family)
+        normalized_section = PSOAuthService.normalize_member_card_text(section_id)
+
+        if normalized_family:
+            query += 'AND family = ? '
+            parameters.append(normalized_family)
+        if normalized_section:
+            query += 'AND section_id = ? '
+            parameters.append(normalized_section)
+
+        query += 'ORDER BY owner_name COLLATE NOCASE ASC, id ASC'
+
+        with PSOAuthService.get_connection() as connection:
+            records = connection.execute(query, tuple(parameters)).fetchall()
+
+        return [PSOAuthService.member_card_payload(record) for record in records]
+
+    @staticmethod
+    def validate_member_card_owner(owner_uid):
+        normalized_owner_uid = PSOAuthService.normalize_member_card_text(owner_uid)
+        if len(normalized_owner_uid) < 2:
+            return None, {'message': 'owner_uid is required'}, 400
+
+        owner_user = PSOAuthService.find_user_by_uid(normalized_owner_uid)
+        if owner_user is None:
+            return None, {'message': 'Owner user not found'}, 404
+
+        if not PSOAuthService.is_member(normalized_owner_uid):
+            return None, {'message': 'Owner must be a registered member'}, 409
+
+        return owner_user, None, None
+
+    @staticmethod
+    def find_member_card(owner_uid, family, section_id, exclude_id=None):
+        PSOAuthService.ensure_database()
+        query = (
+            'SELECT id, owner_uid, owner_name, family, section_id, instrument_title, '
+            'image_url, bio, created_by_uid, created_at, updated_at '
+            'FROM member_cards WHERE owner_uid = ? AND family = ? AND section_id = ?'
+        )
+        parameters = [owner_uid, family, section_id]
+
+        if exclude_id is not None:
+            query += ' AND id != ?'
+            parameters.append(exclude_id)
+
+        with PSOAuthService.get_connection() as connection:
+            record = connection.execute(query, tuple(parameters)).fetchone()
+
+        return PSOAuthService.member_card_payload(record)
+
+    @staticmethod
+    def create_member_card(current_user, body):
+        owner_uid = body.get('owner_uid') or body.get('ownerUid')
+        owner_user, error_body, status_code = PSOAuthService.validate_member_card_owner(owner_uid)
+        if error_body:
+            return None, error_body, status_code
+
+        family = PSOAuthService.normalize_member_card_text(body.get('family'))
+        section_id = PSOAuthService.normalize_member_card_text(body.get('section_id') or body.get('sectionId'))
+        owner_name = PSOAuthService.normalize_member_card_text(body.get('owner_name') or body.get('ownerName'), owner_user.name)
+        instrument_title = PSOAuthService.normalize_member_card_text(body.get('instrument_title') or body.get('instrumentTitle'))
+        image_url = PSOAuthService.normalize_member_card_text(body.get('image_url') or body.get('imageUrl'))
+        bio = PSOAuthService.normalize_member_card_text(body.get('bio'))
+
+        if not family:
+            return None, {'message': 'family is required'}, 400
+        if not section_id:
+            return None, {'message': 'section_id is required'}, 400
+        if not owner_name:
+            return None, {'message': 'owner_name is required'}, 400
+        if PSOAuthService.find_member_card(owner_user.uid, family, section_id) is not None:
+            return None, {'message': 'Member card already exists for this owner and section'}, 409
+
+        with PSOAuthService.get_connection() as connection:
+            cursor = connection.execute(
+                '''
+                INSERT INTO member_cards (
+                    owner_uid, owner_name, family, section_id, instrument_title,
+                    image_url, bio, created_by_uid
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''',
+                (
+                    owner_user.uid,
+                    owner_name,
+                    family,
+                    section_id,
+                    instrument_title,
+                    image_url,
+                    bio,
+                    current_user.uid,
+                )
+            )
+            connection.commit()
+
+        return PSOAuthService.get_member_card_by_id(cursor.lastrowid), None, 201
+
+    @staticmethod
+    def update_member_card(card_id, current_user, body):
+        card = PSOAuthService.get_member_card_by_id(card_id)
+        if card is None:
+            return None, {'message': 'Member card not found'}, 404
+
+        is_admin = current_user.is_admin()
+        if not is_admin and card['owner_uid'] != current_user.uid:
+            return None, {'message': 'Forbidden'}, 403
+
+        updates = {}
+
+        def update_if_present(target_key, *source_keys):
+            for source_key in source_keys:
+                if source_key in body:
+                    updates[target_key] = body.get(source_key)
+                    return
+
+        update_if_present('owner_name', 'owner_name', 'ownerName')
+        update_if_present('instrument_title', 'instrument_title', 'instrumentTitle')
+        update_if_present('image_url', 'image_url', 'imageUrl')
+        update_if_present('bio', 'bio')
+
+        if is_admin:
+            update_if_present('owner_uid', 'owner_uid', 'ownerUid')
+            update_if_present('family', 'family')
+            update_if_present('section_id', 'section_id', 'sectionId')
+
+        if not updates:
+            return card, None, 200
+
+        normalized_updates = {}
+        for key, value in updates.items():
+            normalized_updates[key] = PSOAuthService.normalize_member_card_text(value)
+
+        if 'owner_uid' in normalized_updates:
+            owner_user, error_body, status_code = PSOAuthService.validate_member_card_owner(normalized_updates['owner_uid'])
+            if error_body:
+                return None, error_body, status_code
+            normalized_updates['owner_uid'] = owner_user.uid
+            if not normalized_updates.get('owner_name'):
+                normalized_updates['owner_name'] = owner_user.name
+
+        if 'owner_name' in normalized_updates and not normalized_updates['owner_name']:
+            return None, {'message': 'owner_name is required'}, 400
+        if is_admin and 'family' in normalized_updates and not normalized_updates['family']:
+            return None, {'message': 'family is required'}, 400
+        if is_admin and 'section_id' in normalized_updates and not normalized_updates['section_id']:
+            return None, {'message': 'section_id is required'}, 400
+
+        next_owner_uid = normalized_updates.get('owner_uid', card['owner_uid'])
+        next_family = normalized_updates.get('family', card['family'])
+        next_section_id = normalized_updates.get('section_id', card['section_id'])
+        if PSOAuthService.find_member_card(next_owner_uid, next_family, next_section_id, exclude_id=card_id) is not None:
+            return None, {'message': 'Member card already exists for this owner and section'}, 409
+
+        assignments = []
+        parameters = []
+        for key in ('owner_uid', 'owner_name', 'family', 'section_id', 'instrument_title', 'image_url', 'bio'):
+            if key in normalized_updates:
+                assignments.append(f'{key} = ?')
+                parameters.append(normalized_updates[key])
+
+        assignments.append('updated_at = CURRENT_TIMESTAMP')
+        parameters.append(card_id)
+
+        with PSOAuthService.get_connection() as connection:
+            connection.execute(
+                f"UPDATE member_cards SET {', '.join(assignments)} WHERE id = ?",
+                tuple(parameters)
+            )
+            connection.commit()
+
+        return PSOAuthService.get_member_card_by_id(card_id), None, 200
+
+    @staticmethod
+    def delete_member_card(card_id, current_user):
+        card = PSOAuthService.get_member_card_by_id(card_id)
+        if card is None:
+            return False, {'message': 'Member card not found'}, 404
+
+        if not current_user.is_admin() and card['owner_uid'] != current_user.uid:
+            return False, {'message': 'Forbidden'}, 403
+
+        with PSOAuthService.get_connection() as connection:
+            connection.execute('DELETE FROM member_cards WHERE id = ?', (card_id,))
+            connection.commit()
+
+        return True, None, 200
 
     @staticmethod
     def submit_member_request(uid, name, email, instrument, section):

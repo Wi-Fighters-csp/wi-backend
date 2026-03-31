@@ -133,13 +133,11 @@ class PSOAPI:
                     'uid': current_user.uid,
                     'name': current_user.name,
                     'email': current_user.email,
-                    'member_request_status': PSOAuthService.get_member_request_status(current_user.uid)
+                    'member_request_status': PSOAuthService.get_member_request_status(current_user.uid),
+                    **PSOAuthService.member_profile_payload(current_user.uid)
                 })
 
-            member_payload = dict(member)
-            member_payload['is_member'] = True
-            member_payload['member_request_status'] = 'approved'
-            return jsonify(member_payload)
+            return jsonify(PSOAuthService.member_profile_payload(current_user.uid))
 
         def put(self):
             current_user, error_body, status_code = PSOAuthService.authenticate_request()
@@ -158,8 +156,78 @@ class PSOAPI:
 
             return jsonify({
                 'message': 'Member profile updated',
-                'member': PSOAuthService.get_member_by_uid(current_user.uid)
+                'member': PSOAuthService.member_profile_payload(current_user.uid)
             })
+
+    class _MemberCards(Resource):
+        def get(self):
+            family = request.args.get('family')
+            section_id = request.args.get('section_id') or request.args.get('sectionId')
+            return jsonify({
+                'cards': PSOAuthService.list_member_cards(family=family, section_id=section_id)
+            })
+
+    class _AdminMemberCards(Resource, _AdminMixin):
+        def post(self):
+            current_user, error_body, status_code = PSOAuthService.authenticate_request()
+            if error_body:
+                return error_body, status_code
+
+            admin_error, admin_status = self.require_admin(current_user)
+            if admin_error:
+                return admin_error, admin_status
+
+            card, error_body, status_code = PSOAuthService.create_member_card(current_user, request.get_json() or {})
+            if error_body:
+                return error_body, status_code
+
+            response = jsonify({
+                'card': card
+            })
+            response.status_code = status_code
+            return response
+
+    class _MemberCardDetail(Resource):
+        def get(self, card_id):
+            card = PSOAuthService.get_member_card_by_id(card_id)
+            if card is None:
+                return {'message': 'Member card not found'}, 404
+
+            return jsonify(card)
+
+        def patch(self, card_id):
+            current_user, error_body, status_code = PSOAuthService.authenticate_request()
+            if error_body:
+                return error_body, status_code
+
+            card, error_body, status_code = PSOAuthService.update_member_card(
+                card_id,
+                current_user,
+                request.get_json() or {}
+            )
+            if error_body:
+                return error_body, status_code
+
+            response = jsonify({
+                'card': card
+            })
+            response.status_code = status_code
+            return response
+
+        def delete(self, card_id):
+            current_user, error_body, status_code = PSOAuthService.authenticate_request()
+            if error_body:
+                return error_body, status_code
+
+            deleted, error_body, status_code = PSOAuthService.delete_member_card(card_id, current_user)
+            if error_body:
+                return error_body, status_code
+
+            response = jsonify({
+                'message': 'Member card deleted successfully.'
+            })
+            response.status_code = status_code
+            return response
 
     class _AdminMemberRequests(Resource, _AdminMixin):
         def get(self):
@@ -190,11 +258,13 @@ class PSOAPI:
             if error_body:
                 return error_body, status_code
 
-            return jsonify({
-                'message': 'Member request approved',
+            response = jsonify({
+                'message': 'Request approved successfully.',
                 'request': approved_request,
-                'member': PSOAuthService.get_member_by_uid(approved_request['uid'])
+                'member': PSOAuthService.member_profile_payload(approved_request['uid'])
             })
+            response.status_code = status_code
+            return response
 
     class _AdminRejectMemberRequest(Resource, _AdminMixin):
         def post(self, request_id):
@@ -210,10 +280,12 @@ class PSOAPI:
             if error_body:
                 return error_body, status_code
 
-            return jsonify({
-                'message': 'Member request rejected',
+            response = jsonify({
+                'message': 'Request rejected successfully.',
                 'request': rejected_request
             })
+            response.status_code = status_code
+            return response
 
     class _AdminMembers(Resource, _AdminMixin):
         def get(self):
@@ -253,6 +325,9 @@ api.add_resource(PSOAPI._MemberRegister, '/pso/member-request', endpoint='pso_me
 api.add_resource(PSOAPI._MemberRegister, '/pso/member/register', endpoint='pso_member_register_legacy')
 api.add_resource(PSOAPI._MemberRequestStatus, '/pso/member-request/status')
 api.add_resource(PSOAPI._MemberProfile, '/pso/member/profile')
+api.add_resource(PSOAPI._MemberCards, '/pso/member-cards')
+api.add_resource(PSOAPI._AdminMemberCards, '/pso/admin/member-cards')
+api.add_resource(PSOAPI._MemberCardDetail, '/pso/member-cards/<int:card_id>')
 api.add_resource(PSOAPI._AdminMemberRequests, '/pso/admin/member-requests')
 api.add_resource(PSOAPI._AdminApproveMemberRequest, '/pso/admin/member-requests/<int:request_id>/approve')
 api.add_resource(PSOAPI._AdminRejectMemberRequest, '/pso/admin/member-requests/<int:request_id>/reject')

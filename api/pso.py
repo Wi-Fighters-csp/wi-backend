@@ -22,7 +22,7 @@ class PSOAPI:
 
     class _Signup(Resource):
         def post(self):
-            body = request.get_json()
+            body = request.get_json() or {}
             if not body:
                 return {
                     'message': 'Please provide user details',
@@ -30,11 +30,36 @@ class PSOAPI:
                     'error': 'Bad request'
                 }, 400
 
-            user, error_body, status_code = PSOAuthService.create_user(
-                body.get('name'),
-                body.get('uid'),
-                body.get('email'),
+            uid = (
+                body.get('uid')
+                or body.get('username')
+                or body.get('userId')
+                or body.get('user_id')
+                or body.get('login')
+            )
+            name = (
+                body.get('name')
+                or body.get('full_name')
+                or body.get('fullName')
+                or body.get('display_name')
+                or body.get('displayName')
+                or uid
+            )
+            email = body.get('email')
+            if not email and uid:
+                email = PSOAuthService.default_email_for_uid(uid)
+
+            password = (
                 body.get('password')
+                or body.get('newPassword')
+                or body.get('new_password')
+            )
+
+            user, error_body, status_code = PSOAuthService.create_user(
+                name,
+                uid,
+                email,
+                password
             )
             if error_body:
                 return error_body, status_code

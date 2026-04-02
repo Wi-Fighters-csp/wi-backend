@@ -200,6 +200,22 @@ class PSOAPI:
                 'member': PSOAuthService.member_profile_payload(current_user.uid)
             })
 
+    class _Progression(Resource):
+        def get(self):
+            current_user, error_body, status_code = PSOAuthService.authenticate_request()
+            if error_body:
+                return error_body, status_code
+
+            return jsonify(PSOAuthService.get_progression(current_user.uid))
+
+        def put(self):
+            current_user, error_body, status_code = PSOAuthService.authenticate_request()
+            if error_body:
+                return error_body, status_code
+
+            progression = PSOAuthService.save_progression(current_user.uid, request.get_json() or {})
+            return jsonify(progression)
+
     class _MemberCards(Resource):
         def get(self):
             family = request.args.get('family')
@@ -374,6 +390,7 @@ api.add_resource(PSOAPI._MemberRegister, '/pso/member-request', endpoint='pso_me
 api.add_resource(PSOAPI._MemberRegister, '/pso/member/register', endpoint='pso_member_register_legacy')
 api.add_resource(PSOAPI._MemberRequestStatus, '/pso/member-request/status')
 api.add_resource(PSOAPI._MemberProfile, '/pso/member/profile')
+api.add_resource(PSOAPI._Progression, '/pso/progression')
 api.add_resource(PSOAPI._MemberCards, '/pso/member-cards')
 api.add_resource(PSOAPI._AdminMemberCards, '/pso/admin/member-cards')
 api.add_resource(PSOAPI._MemberCardDetail, '/pso/member-cards/<int:card_id>')

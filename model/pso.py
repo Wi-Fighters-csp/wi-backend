@@ -1,5 +1,7 @@
 import os
 import sqlite3
+from datetime import datetime, timezone
+import json
 
 import jwt
 from flask import current_app, request
@@ -77,6 +79,103 @@ class PSOAuthService:
     @staticmethod
     def normalize_member_card_text(value, default=''):
         return str(value or default).strip()
+
+    @staticmethod
+    def normalize_progression_xp(value):
+        try:
+            return max(0, int(value or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def normalize_completed_quests(value):
+        if not isinstance(value, list):
+            return []
+
+        normalized = []
+        seen = set()
+        for entry in value:
+            quest_id = str(entry or '').strip()
+            if not quest_id or quest_id in seen:
+                continue
+            seen.add(quest_id)
+            normalized.append(quest_id)
+        return normalized
+
+    @staticmethod
+    def normalize_progression_metrics(value):
+        if not isinstance(value, dict):
+            return {}
+
+        normalized = {}
+        for key, metric_value in value.items():
+            metric_name = str(key or '').strip()
+            if not metric_name:
+                continue
+
+            if isinstance(metric_value, bool):
+                normalized[metric_name] = metric_value
+            elif isinstance(metric_value, (int, float)):
+                normalized[metric_name] = metric_value
+            elif isinstance(metric_value, str):
+                normalized[metric_name] = metric_value.strip()
+            elif metric_value is None:
+                normalized[metric_name] = None
+        return normalized
+
+    @staticmethod
+    def progression_timestamp():
+        return datetime.now(timezone.utc).isoformat()
+
+    @staticmethod
+    def progression_payload(record=None):
+        if record is None:
+            return {
+                'xp': 0,
+                'completedQuests': [],
+                'metrics': {},
+                'lastUpdatedAt': None,
+            }
+
+        try:
+            completed_quests = json.loads(record['completed_quests'] or '[]')
+        except (TypeError, ValueError, json.JSONDecodeError):
+            completed_quests = []
+
+        try:
+            metrics = json.loads(record['metrics'] or '{}')
+        except (TypeError, ValueError, json.JSONDecodeError):
+            metrics = {}
+
+        return {
+            'xp': PSOAuthService.normalize_progression_xp(record['xp']),
+            'completedQuests': PSOAuthService.normalize_completed_quests(completed_quests),
+            'metrics': PSOAuthService.normalize_progression_metrics(metrics),
+            'lastUpdatedAt': record['last_updated_at'],
+        }
+
+    @staticmethod
+    def merge_progression(existing_progression, body):
+        payload = body.get('progression') if isinstance(body.get('progression'), dict) else body
+        if not isinstance(payload, dict):
+            payload = {}
+
+        merged = {
+            'xp': existing_progression['xp'],
+            'completedQuests': list(existing_progression['completedQuests']),
+            'metrics': dict(existing_progression['metrics']),
+            'lastUpdatedAt': existing_progression['lastUpdatedAt'],
+        }
+
+        if 'xp' in payload:
+            merged['xp'] = PSOAuthService.normalize_progression_xp(payload.get('xp'))
+        if 'completedQuests' in payload:
+            merged['completedQuests'] = PSOAuthService.normalize_completed_quests(payload.get('completedQuests'))
+        if 'metrics' in payload:
+            merged['metrics'] = PSOAuthService.normalize_progression_metrics(payload.get('metrics'))
+
+        merged['lastUpdatedAt'] = PSOAuthService.progression_timestamp()
+        return merged
 
     @staticmethod
     def ensure_database():
@@ -201,6 +300,18 @@ class PSOAuthService:
             )
             connection.execute(
                 'CREATE UNIQUE INDEX IF NOT EXISTS idx_member_cards_owner_section_unique ON member_cards(owner_uid, family, section_id)'
+            )
+            connection.execute(
+                '''
+                CREATE TABLE IF NOT EXISTS user_progression (
+                    uid TEXT PRIMARY KEY,
+                    xp INTEGER NOT NULL DEFAULT 0,
+                    completed_quests TEXT NOT NULL DEFAULT '[]',
+                    metrics TEXT NOT NULL DEFAULT '{}',
+                    last_updated_at TEXT,
+                    FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
+                )
+                '''
             )
             connection.commit()
 
@@ -804,6 +915,51 @@ class PSOAuthService:
             'section': str(member.get('section') or '').strip(),
             'practice_time': PSOAuthService.normalize_practice_time(member.get('practice_time')) or 0,
         }
+
+    @staticmethod
+    def get_progression(uid):
+        PSOAuthService.ensure_database()
+        with PSOAuthService.get_connection() as connection:
+            record = connection.execute(
+                '''
+                SELECT uid, xp, completed_quests, metrics, last_updated_at
+                FROM user_progression
+                WHERE uid = ?
+                ''',
+                (uid,)
+            ).fetchone()
+
+        return PSOAuthService.progression_payload(record)
+
+    @staticmethod
+    def save_progression(uid, body):
+        PSOAuthService.ensure_database()
+
+        existing_progression = PSOAuthService.get_progression(uid)
+        updated_progression = PSOAuthService.merge_progression(existing_progression, body or {})
+
+        with PSOAuthService.get_connection() as connection:
+            connection.execute(
+                '''
+                INSERT INTO user_progression (uid, xp, completed_quests, metrics, last_updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(uid) DO UPDATE SET
+                    xp = excluded.xp,
+                    completed_quests = excluded.completed_quests,
+                    metrics = excluded.metrics,
+                    last_updated_at = excluded.last_updated_at
+                ''',
+                (
+                    uid,
+                    updated_progression['xp'],
+                    json.dumps(updated_progression['completedQuests']),
+                    json.dumps(updated_progression['metrics']),
+                    updated_progression['lastUpdatedAt'],
+                )
+            )
+            connection.commit()
+
+        return updated_progression
 
     @staticmethod
     def member_card_payload(record):

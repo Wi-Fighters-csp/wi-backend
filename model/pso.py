@@ -3,9 +3,11 @@ import sqlite3
 
 import jwt
 from flask import current_app, request
+from sqlalchemy import func
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from __init__ import app
+from model.user import User
 
 
 class PSOUser:
@@ -50,6 +52,13 @@ class PSOAuthService:
     @staticmethod
     def default_email_for_uid(uid):
         return f'{uid}@powayorchestra.local'
+
+    @staticmethod
+    def shared_user_email(user):
+        email = str(getattr(user, 'email', '') or '').strip().lower()
+        if len(email) >= 3 and '@' in email and email != '?':
+            return email
+        return PSOAuthService.default_email_for_uid(user.uid)
 
     @staticmethod
     def normalize_practice_time(practice_time):
@@ -292,6 +301,68 @@ class PSOAuthService:
         return PSOAuthService.find_user_by_name(normalized_identifier)
 
     @staticmethod
+    def find_shared_user_by_identifier(identifier):
+        normalized_identifier = str(identifier or '').strip()
+        if not normalized_identifier:
+            return None
+
+        user = User.query.filter_by(_uid=normalized_identifier).first()
+        if user is not None:
+            return user
+
+        normalized_email = normalized_identifier.lower()
+        user = User.query.filter(func.lower(User._email) == normalized_email).first()
+        if user is not None:
+            return user
+
+        return User.query.filter(func.lower(User._name) == normalized_identifier.lower()).first()
+
+    @staticmethod
+    def sync_shared_user(shared_user):
+        PSOAuthService.ensure_database()
+
+        normalized_uid = str(shared_user.uid or '').strip()
+        normalized_name = str(shared_user.name or normalized_uid).strip() or normalized_uid
+        normalized_email = PSOAuthService.shared_user_email(shared_user)
+        normalized_role = PSOAuthService.normalize_role(getattr(shared_user, 'role', 'user'))
+
+        existing_email_user = PSOAuthService.find_user_by_email(normalized_email)
+        if existing_email_user is not None and existing_email_user.uid != normalized_uid:
+            normalized_email = PSOAuthService.default_email_for_uid(normalized_uid)
+
+        with PSOAuthService.get_connection() as connection:
+            existing = connection.execute(
+                'SELECT id FROM users WHERE uid = ?',
+                (normalized_uid,)
+            ).fetchone()
+
+            if existing is None:
+                connection.execute(
+                    'INSERT INTO users (uid, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
+                    (
+                        normalized_uid,
+                        normalized_name,
+                        normalized_email,
+                        shared_user._password,
+                        normalized_role,
+                    )
+                )
+            else:
+                connection.execute(
+                    'UPDATE users SET name = ?, email = ?, password_hash = ?, role = ? WHERE uid = ?',
+                    (
+                        normalized_name,
+                        normalized_email,
+                        shared_user._password,
+                        normalized_role,
+                        normalized_uid,
+                    )
+                )
+            connection.commit()
+
+        return PSOAuthService.find_user_by_uid(normalized_uid)
+
+    @staticmethod
     def list_users():
         PSOAuthService.ensure_database()
         with PSOAuthService.get_connection() as connection:
@@ -452,19 +523,51 @@ class PSOAuthService:
     def authenticate(identifier, password):
         PSOAuthService.ensure_database()
 
-        if identifier is None or len(str(identifier).strip()) == 0:
+        normalized_identifier = str(identifier or '').strip()
+        current_app.logger.info('PSO auth attempt identifier=%s', normalized_identifier)
+
+        if identifier is None or len(normalized_identifier) == 0:
+            current_app.logger.warning('PSO auth failed: missing identifier')
             return None, {'message': 'User ID is missing'}, 401
 
         if password is None or len(str(password)) == 0:
+            current_app.logger.warning('PSO auth failed for identifier=%s: missing password', normalized_identifier)
             return None, {'message': 'Password is missing'}, 401
 
-        user = PSOAuthService.find_user_by_identifier(identifier)
-        if user is None or not check_password_hash(user.password_hash, password):
-            return None, {
-                'message': 'Invalid Poway Orchestra user ID or password. If you have not created a Poway account yet, sign up first.'
-            }, 401
+        user = PSOAuthService.find_user_by_identifier(normalized_identifier)
+        current_app.logger.info('PSO auth local user found=%s identifier=%s', user is not None, normalized_identifier)
+        if user is not None and check_password_hash(user.password_hash, password):
+            current_app.logger.info('PSO auth success via local PSO user identifier=%s uid=%s', normalized_identifier, user.uid)
+            return user, None, None
 
-        return user, None, None
+        shared_user = PSOAuthService.find_shared_user_by_identifier(normalized_identifier)
+        current_app.logger.info('PSO auth shared user found=%s identifier=%s', shared_user is not None, normalized_identifier)
+        if shared_user is not None and shared_user.is_password(password):
+            synced_user = PSOAuthService.sync_shared_user(shared_user)
+            if synced_user is not None:
+                current_app.logger.info(
+                    'PSO auth success via shared user sync identifier=%s uid=%s',
+                    normalized_identifier,
+                    synced_user.uid,
+                )
+                return synced_user, None, None
+
+            current_app.logger.warning(
+                'PSO auth shared user sync failed identifier=%s shared_uid=%s',
+                normalized_identifier,
+                shared_user.uid,
+            )
+
+        if user is not None:
+            current_app.logger.warning('PSO auth failed: local password mismatch identifier=%s uid=%s', normalized_identifier, user.uid)
+        elif shared_user is not None:
+            current_app.logger.warning('PSO auth failed: shared password mismatch identifier=%s uid=%s', normalized_identifier, shared_user.uid)
+        else:
+            current_app.logger.warning('PSO auth failed: no local or shared user for identifier=%s', normalized_identifier)
+
+        return None, {
+            'message': 'Invalid Poway Orchestra user ID or password. If you have not created a Poway account yet, sign up first.'
+        }, 401
 
     @staticmethod
     def authenticate_request():
@@ -495,11 +598,24 @@ class PSOAuthService:
 
         user = PSOAuthService.find_user_by_uid(data.get('_uid'))
         if user is None:
-            return None, {
-                'message': 'Invalid Authentication token!',
-                'data': None,
-                'error': 'Unauthorized'
-            }, 401
+            current_app.logger.info('PSO token fallback to shared user for uid=%s', data.get('_uid'))
+            shared_user = User.query.filter_by(_uid=data.get('_uid')).first()
+            if shared_user is None:
+                current_app.logger.warning('PSO token auth failed: uid not found locally or shared uid=%s', data.get('_uid'))
+                return None, {
+                    'message': 'Invalid Authentication token!',
+                    'data': None,
+                    'error': 'Unauthorized'
+                }, 401
+
+            user = PSOAuthService.sync_shared_user(shared_user)
+            if user is None:
+                current_app.logger.warning('PSO token auth failed: shared user sync failed uid=%s', data.get('_uid'))
+                return None, {
+                    'message': 'Invalid Authentication token!',
+                    'data': None,
+                    'error': 'Unauthorized'
+                }, 401
 
         return user, None, None
 

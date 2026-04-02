@@ -7,7 +7,7 @@ This HTML is setup as as a Jinja2 layout, coders use layouts for:
 <!DOCTYPE HTML>
 <html lang="en">
 
-{% set basename = "Open Coding" %}
+{% set basename = "Poway Symphony Orchestra" %}
 {% set github = "https://github.com/open-coding-society" %}
 {% set twitter = "https://x.com/Open_Coding" %}
 {% set youtube = "https://www.youtube.com/@OpenCodingSociety" %}
@@ -16,6 +16,9 @@ This HTML is setup as as a Jinja2 layout, coders use layouts for:
     <!-- Required meta tags -->
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:wght@400;500;600&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
     <!-- JQuery -->
     <script type="text/javascript" language="javascript" src="https://code.jquery.com/jquery-3.5.1.js"></script>
@@ -34,10 +37,62 @@ This HTML is setup as as a Jinja2 layout, coders use layouts for:
     {% endblock %}
       
     <style>
+        :root {
+            --pso-red: #9E2A2B;
+            --pso-orange: #D97706;
+            --pso-cream: #FAF3E0;
+            --pso-brown: #3E2723;
+            --pso-peach: #F2A6A0;
+            --pso-shadow: rgba(62, 39, 35, 0.24);
+        }
+
+        html,
+        body {
+            min-height: 100%;
+        }
+
+        body {
+            margin: 0;
+            color: var(--pso-brown);
+            font-family: 'Cormorant Garamond', serif;
+            background:
+                radial-gradient(circle at top left, rgba(242, 166, 160, 0.34), transparent 34%),
+                radial-gradient(circle at top right, rgba(217, 119, 6, 0.20), transparent 28%),
+                linear-gradient(180deg, #fffaf1 0%, var(--pso-cream) 42%, #f6ead1 100%);
+        }
+
+        body.dark-mode {
+            color: var(--pso-cream);
+            background:
+                radial-gradient(circle at top left, rgba(242, 166, 160, 0.16), transparent 30%),
+                radial-gradient(circle at top right, rgba(217, 119, 6, 0.18), transparent 24%),
+                linear-gradient(180deg, #2f1d1a 0%, #3E2723 52%, #241310 100%);
+        }
+
+        h1, h2, h3, h4, h5, h6,
+        .navbar-brand,
+        .brand-title,
+        .page-title {
+            font-family: 'Cinzel', serif;
+            letter-spacing: 0.04em;
+        }
+
+        a {
+            color: var(--pso-red);
+        }
+
+        a:hover {
+            color: #7f1f22;
+        }
+
         .navbar {
             position: static;
             z-index: 9999;
+            background: linear-gradient(120deg, rgba(62, 39, 35, 0.96), rgba(158, 42, 43, 0.94));
+            box-shadow: 0 14px 30px var(--pso-shadow);
+            border-bottom: 1px solid rgba(250, 243, 224, 0.18);
         }
+
         #body_background {
             position: fixed;
             top: 0;
@@ -45,6 +100,141 @@ This HTML is setup as as a Jinja2 layout, coders use layouts for:
             width: 100%;
             height: 100%;
             z-index: -1;
+            background:
+                radial-gradient(circle at 15% 15%, rgba(242, 166, 160, 0.30), transparent 20%),
+                radial-gradient(circle at 85% 10%, rgba(217, 119, 6, 0.24), transparent 22%),
+                radial-gradient(circle at 50% 100%, rgba(158, 42, 43, 0.16), transparent 30%);
+            opacity: 0.95;
+        }
+
+        body.dark-mode #body_background {
+            opacity: 0.55;
+        }
+
+        .page-shell {
+            padding: 2rem 1.25rem 3rem;
+        }
+
+        .themed-panel,
+        .card,
+        .container .bg-light,
+        .container .rounded-3,
+        .table,
+        .dropdown-menu {
+            border: 1px solid rgba(62, 39, 35, 0.10);
+            box-shadow: 0 18px 45px rgba(62, 39, 35, 0.10);
+        }
+
+        .themed-panel,
+        .card,
+        .container .bg-light,
+        .container .rounded-3 {
+            background: rgba(255, 252, 246, 0.92) !important;
+            color: var(--pso-brown) !important;
+        }
+
+        body.dark-mode .themed-panel,
+        body.dark-mode .card,
+        body.dark-mode .container .bg-light,
+        body.dark-mode .container .rounded-3,
+        body.dark-mode .dropdown-menu {
+            background: rgba(49, 29, 24, 0.92) !important;
+            color: var(--pso-cream) !important;
+            border-color: rgba(250, 243, 224, 0.12);
+        }
+
+        .btn-primary,
+        .bg-primary {
+            background-color: var(--pso-red) !important;
+            border-color: var(--pso-red) !important;
+        }
+
+        .btn-primary:hover,
+        .btn-primary:focus {
+            background-color: #842123 !important;
+            border-color: #842123 !important;
+        }
+
+        .btn-secondary,
+        .bg-secondary {
+            background-color: var(--pso-orange) !important;
+            border-color: var(--pso-orange) !important;
+            color: var(--pso-cream) !important;
+        }
+
+        .text-light {
+            color: var(--pso-cream) !important;
+        }
+
+        .text-dark,
+        .link-dark {
+            color: var(--pso-brown) !important;
+        }
+
+        body.dark-mode .text-dark,
+        body.dark-mode .link-dark,
+        body.dark-mode .dropdown-item,
+        body.dark-mode .nav-link,
+        body.dark-mode .navbar-brand {
+            color: var(--pso-cream) !important;
+        }
+
+        .form-control,
+        input,
+        select,
+        textarea {
+            border: 1px solid rgba(62, 39, 35, 0.18);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.86);
+            color: var(--pso-brown);
+        }
+
+        .form-control:focus,
+        input:focus,
+        select:focus,
+        textarea:focus {
+            border-color: var(--pso-orange);
+            box-shadow: 0 0 0 0.2rem rgba(217, 119, 6, 0.18);
+        }
+
+        body.dark-mode .form-control,
+        body.dark-mode input,
+        body.dark-mode select,
+        body.dark-mode textarea {
+            background: rgba(250, 243, 224, 0.08);
+            color: var(--pso-cream);
+            border-color: rgba(250, 243, 224, 0.16);
+        }
+
+        .table {
+            background: rgba(255, 252, 246, 0.9);
+            border-radius: 18px;
+            overflow: hidden;
+        }
+
+        .table thead {
+            background: rgba(158, 42, 43, 0.10);
+        }
+
+        body.dark-mode .table {
+            background: rgba(49, 29, 24, 0.88);
+            color: var(--pso-cream);
+        }
+
+        .alert {
+            border-radius: 14px;
+            border: none;
+        }
+
+        .alert-success {
+            background: rgba(217, 119, 6, 0.14);
+            color: var(--pso-brown);
+        }
+
+        .alert-error,
+        .alert-danger {
+            background: rgba(158, 42, 43, 0.14);
+            color: var(--pso-red);
         }
     </style>
     {% block style %}
@@ -64,21 +254,6 @@ This HTML is setup as as a Jinja2 layout, coders use layouts for:
 
 </body>
 
-{% block background %}
-    <script src="{{ url_for('static', filename='js/three.r119.min.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/vanta.birds.min.js') }}"></script>
-    <script>
-        VANTA.BIRDS({
-            el: "#body_background",
-            mouseControls: true,
-            touchControls: true,
-            gyroControls: false,
-            minHeight: 200.00,
-            minWidth: 200.00,
-            scale: 1.00,
-            scaleMobile: 1.00
-        })
-    </script>
-{% endblock %}
+{% block background %}{% endblock %}
 
 </html>

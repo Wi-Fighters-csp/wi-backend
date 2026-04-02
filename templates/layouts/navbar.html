@@ -1,27 +1,42 @@
 <!-- Navigation Bar from bootstrap
 This HTML is setup as a fragment allowing it to be "included" by other HTML files via Jinja2
 -->
-    <nav class="navbar navbar-expand-lg navbar-light bg-secondary">
+    <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container-fluid">
-            <div class="btn-group">
-                <img src="{{ url_for('static', filename='assets/ncs_logo.png') }}" width="50" height="50" class="d-inline-block align-center" alt="">
-                <a class="navbar-brand" href="https://csp.nighthawkcodingsociety.com/">{{basename}}</a>
+            <div class="btn-group align-items-center">
+                <a class="navbar-brand d-flex align-items-center gap-3" href="{{ url_for('index') }}" style="color: var(--pso-cream) !important; text-decoration: none;">
+                    <span style="width: 54px; height: 54px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: linear-gradient(145deg, var(--pso-peach), var(--pso-orange)); color: var(--pso-brown); box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 8px 20px rgba(0,0,0,0.22); font-size: 1.55rem;">♪</span>
+                    <span style="display: inline-flex; flex-direction: column; line-height: 1;">
+                        <span class="brand-title" style="font-size: 1.22rem; color: var(--pso-cream);">Poway Symphony orchestra</span>
+                        <span style="font-family: 'Cormorant Garamond', serif; font-size: 0.92rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pso-peach);">Musician Console</span>
+                    </span>
+                </a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavAltMarkup" aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
                 </button>
 
-                <div class="navbar-nav">
+                <div class="navbar-nav align-items-center ms-3">
                     <!-- url_for is a Jinja2 pre-processor that finds route from function name (def) -->
-                    <a class="nav-link" href={{ url_for('index') }}>Home</a>
+                    <a class="nav-link" style="color: var(--pso-cream);" href={{ url_for('index') }}>Home</a>
                     <div class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="navbarDarkDropdownMenuLink" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <a class="nav-link dropdown-toggle" style="color: var(--pso-cream);" href="#" id="navbarDarkDropdownMenuLink" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                           Data 
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarDarkDropdownMenuLink">
+                        <ul class="dropdown-menu" aria-labelledby="navbarDarkDropdownMenuLink">
                             <li><a class="dropdown-item" href={{ url_for('u2table') }}>User Management</a></li>
                             <li><a class="dropdown-item" href={{ url_for('kasm_users') }}>Kasm User Report</a></li>
                             <li><a class="dropdown-item" href={{ url_for('sections') }}>Sections</a></li>
                             <li><a class="dropdown-item" href={{ url_for('persona') }}>Personas</a></li>
+                        </ul>
+                    </div>
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" style="color: var(--pso-cream);" href="#" id="navbarPsoDropdownMenuLink" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                          PSO Data
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="navbarPsoDropdownMenuLink">
+                            <li><a class="dropdown-item" href={{ url_for('pso_users') }}>Users</a></li>
+                            <li><a class="dropdown-item" href={{ url_for('pso_members') }}>Members</a></li>
+                            <li><a class="dropdown-item" href={{ url_for('pso_member_cards') }}>Created Member Cards</a></li>
                         </ul>
                     </div>
                 </div>
@@ -31,15 +46,15 @@ This HTML is setup as a fragment allowing it to be "included" by other HTML file
             <div class="btn-group">
                 <!-- Search Box -->
                 <div class="px-3" style="height:30px;">
-                    <input id="search" type="search" placeholder="Search" aria-label="Search">
+                    <input id="search" type="search" placeholder="Search the score" aria-label="Search" style="padding: 0.35rem 0.8rem; min-width: 210px;">
                 </div>
                 
                 {% if current_user.is_authenticated %}
                     <div class="dropdown px-3">
-                        <span class="dropdown-toggle link-dark" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <span class="dropdown-toggle" style="color: var(--pso-cream); cursor: pointer;" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             {{ current_user.name }}
                         </span>
-                        <ul class="dropdown-menu dropdown-menu-dark">
+                        <ul class="dropdown-menu">
                             <li>
                                 <div class="dropdown-item">
                                     <p style="margin-bottom:2px"><strong>ID:</strong> {{current_user.uid}} </p>
@@ -48,18 +63,18 @@ This HTML is setup as a fragment allowing it to be "included" by other HTML file
                                     
                                 </div>
                             </li>
-                            <li><a class="dropdown-item active" href="{{ url_for('logout') }}">Logout</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('logout') }}">Logout</a></li>
                         </ul>
                     </div>
                 {% else %}
-                    <a href="{{ url_for('login') }}" class="px-3 link-dark">Login</a>
+                    <a href="{{ url_for('login') }}" class="px-3" style="color: var(--pso-cream); text-decoration: none;">Login</a>
                 {% endif %}
                 
 
                 <!-- Dark mode action -->
                 <div class="form-check form-switch">
                     <label class="custom-control-label" for="darkSwitch"></label>
-                    <input type="checkbox" onclick="darkFunction()" class="form-check-input link-dark" id="darkSwitch">
+                    <input type="checkbox" onclick="darkFunction()" class="form-check-input" id="darkSwitch">
                 </div>
             </div>
 

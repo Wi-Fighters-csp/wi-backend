@@ -258,6 +258,95 @@ class PSOAuthService:
         return PSOUser(record)
 
     @staticmethod
+    def list_users():
+        PSOAuthService.ensure_database()
+        with PSOAuthService.get_connection() as connection:
+            records = connection.execute(
+                '''
+                SELECT id, uid, name, email, role, created_at
+                FROM users
+                ORDER BY name COLLATE NOCASE ASC, uid COLLATE NOCASE ASC
+                '''
+            ).fetchall()
+
+        return [dict(record) for record in records]
+
+    @staticmethod
+    def list_admins():
+        PSOAuthService.ensure_database()
+        with PSOAuthService.get_connection() as connection:
+            records = connection.execute(
+                '''
+                SELECT id, uid, name, email, role, created_at
+                FROM users
+                WHERE LOWER(TRIM(role)) IN ('admin', 'superadmin')
+                ORDER BY name COLLATE NOCASE ASC, uid COLLATE NOCASE ASC
+                '''
+            ).fetchall()
+
+        return [dict(record) for record in records]
+
+    @staticmethod
+    def update_pso_user(uid, body):
+        user = PSOAuthService.find_user_by_uid(uid)
+        if user is None:
+            return None, {'message': 'PSO user not found'}, 404
+
+        updates = {}
+
+        if 'name' in body:
+            name = str(body.get('name') or '').strip()
+            if len(name) < 2:
+                return None, {'message': 'name must be at least 2 characters'}, 400
+            updates['name'] = name
+
+        if 'email' in body:
+            email = str(body.get('email') or '').strip().lower()
+            if len(email) < 3 or '@' not in email:
+                return None, {'message': 'email is invalid'}, 400
+            existing_user = PSOAuthService.find_user_by_email(email)
+            if existing_user is not None and existing_user.uid != uid:
+                return None, {'message': 'email already exists'}, 409
+            updates['email'] = email
+
+        if 'role' in body:
+            updates['role'] = PSOAuthService.normalize_role(body.get('role'), default=user.role)
+
+        if not updates:
+            return user.read(), None, 200
+
+        assignments = []
+        parameters = []
+        for key in ('name', 'email', 'role'):
+            if key in updates:
+                assignments.append(f'{key} = ?')
+                parameters.append(updates[key])
+
+        parameters.append(uid)
+
+        with PSOAuthService.get_connection() as connection:
+            connection.execute(
+                f"UPDATE users SET {', '.join(assignments)} WHERE uid = ?",
+                tuple(parameters)
+            )
+            connection.commit()
+
+        updated_user = PSOAuthService.find_user_by_uid(uid)
+        return updated_user.read(), None, 200
+
+    @staticmethod
+    def delete_pso_user(uid):
+        user = PSOAuthService.find_user_by_uid(uid)
+        if user is None:
+            return False, {'message': 'PSO user not found'}, 404
+
+        with PSOAuthService.get_connection() as connection:
+            connection.execute('DELETE FROM users WHERE uid = ?', (uid,))
+            connection.commit()
+
+        return True, None, 200
+
+    @staticmethod
     def create_user(name, uid, email, password, role='user'):
         PSOAuthService.ensure_database()
 
@@ -600,7 +689,7 @@ class PSOAuthService:
         return PSOAuthService.member_card_payload(record)
 
     @staticmethod
-    def list_member_cards(family=None, section_id=None):
+    def list_member_cards(current_user=None, family=None, section_id=None):
         PSOAuthService.ensure_database()
         query = (
             'SELECT id, owner_uid, owner_name, family, section_id, instrument_title, '
@@ -619,7 +708,7 @@ class PSOAuthService:
             query += 'AND section_id = ? '
             parameters.append(normalized_section)
 
-        query += 'ORDER BY owner_name COLLATE NOCASE ASC, id ASC'
+        query += 'ORDER BY family COLLATE NOCASE ASC, section_id COLLATE NOCASE ASC, owner_name COLLATE NOCASE ASC, id ASC'
 
         with PSOAuthService.get_connection() as connection:
             records = connection.execute(query, tuple(parameters)).fetchall()
@@ -680,6 +769,8 @@ class PSOAuthService:
             return None, {'message': 'section_id is required'}, 400
         if not owner_name:
             return None, {'message': 'owner_name is required'}, 400
+        if not instrument_title:
+            return None, {'message': 'instrument_title is required'}, 400
         if PSOAuthService.find_member_card(owner_user.uid, family, section_id) is not None:
             return None, {'message': 'Member card already exists for this owner and section'}, 409
 
@@ -756,6 +847,8 @@ class PSOAuthService:
             return None, {'message': 'family is required'}, 400
         if is_admin and 'section_id' in normalized_updates and not normalized_updates['section_id']:
             return None, {'message': 'section_id is required'}, 400
+        if 'instrument_title' in normalized_updates and not normalized_updates['instrument_title']:
+            return None, {'message': 'instrument_title is required'}, 400
 
         next_owner_uid = normalized_updates.get('owner_uid', card['owner_uid'])
         next_family = normalized_updates.get('family', card['family'])
@@ -968,6 +1061,91 @@ class PSOAuthService:
             ).fetchall()
 
         return [dict(record) for record in records]
+
+    @staticmethod
+    def update_member(uid, body):
+        member = PSOAuthService.get_member_by_uid(uid)
+        if member is None:
+            return None, {'message': 'PSO member not found'}, 404
+
+        updates = {}
+
+        if 'name' in body:
+            name = str(body.get('name') or '').strip()
+            if len(name) < 2:
+                return None, {'message': 'name must be at least 2 characters'}, 400
+            updates['name'] = name
+
+        if 'email' in body:
+            email = str(body.get('email') or '').strip().lower()
+            if len(email) < 3 or '@' not in email:
+                return None, {'message': 'email is invalid'}, 400
+            updates['email'] = email
+
+        if 'instrument' in body:
+            instrument = str(body.get('instrument') or '').strip()
+            if not instrument:
+                return None, {'message': 'instrument is required'}, 400
+            updates['instrument'] = instrument
+
+        if 'section' in body:
+            section = str(body.get('section') or '').strip()
+            if not section:
+                return None, {'message': 'section is required'}, 400
+            updates['section'] = section
+
+        if 'practice_time' in body:
+            practice_time = PSOAuthService.normalize_practice_time(body.get('practice_time'))
+            if practice_time is None:
+                return None, {'message': 'practice_time must be a non-negative integer'}, 400
+            updates['practice_time'] = practice_time
+
+        if not updates:
+            return member, None, 200
+
+        assignments = []
+        parameters = []
+        for key in ('name', 'email', 'instrument', 'section', 'practice_time'):
+            if key in updates:
+                assignments.append(f'{key} = ?')
+                parameters.append(updates[key])
+
+        parameters.append(uid)
+
+        with PSOAuthService.get_connection() as connection:
+            connection.execute(
+                f"UPDATE orchestra_members SET {', '.join(assignments)} WHERE uid = ?",
+                tuple(parameters)
+            )
+            if 'name' in updates or 'email' in updates:
+                user_assignments = []
+                user_parameters = []
+                if 'name' in updates:
+                    user_assignments.append('name = ?')
+                    user_parameters.append(updates['name'])
+                if 'email' in updates:
+                    user_assignments.append('email = ?')
+                    user_parameters.append(updates['email'])
+                user_parameters.append(uid)
+                connection.execute(
+                    f"UPDATE users SET {', '.join(user_assignments)} WHERE uid = ?",
+                    tuple(user_parameters)
+                )
+            connection.commit()
+
+        return PSOAuthService.get_member_by_uid(uid), None, 200
+
+    @staticmethod
+    def delete_member(uid):
+        member = PSOAuthService.get_member_by_uid(uid)
+        if member is None:
+            return False, {'message': 'PSO member not found'}, 404
+
+        with PSOAuthService.get_connection() as connection:
+            connection.execute('DELETE FROM orchestra_members WHERE uid = ?', (uid,))
+            connection.commit()
+
+        return True, None, 200
 
     @staticmethod
     def update_member_profile(uid, instrument, section, practice_time):

@@ -164,7 +164,11 @@ class PSOAPI:
             family = request.args.get('family')
             section_id = request.args.get('section_id') or request.args.get('sectionId')
             return jsonify({
-                'cards': PSOAuthService.list_member_cards(family=family, section_id=section_id)
+                'cards': PSOAuthService.list_member_cards(
+                    current_user=None,
+                    family=family,
+                    section_id=section_id
+                )
             })
 
     class _AdminMemberCards(Resource, _AdminMixin):
@@ -182,6 +186,7 @@ class PSOAPI:
                 return error_body, status_code
 
             response = jsonify({
+                'message': 'Member card created.',
                 'card': card
             })
             response.status_code = status_code
@@ -193,7 +198,9 @@ class PSOAPI:
             if card is None:
                 return {'message': 'Member card not found'}, 404
 
-            return jsonify(card)
+            return jsonify({
+                'card': card
+            })
 
         def patch(self, card_id):
             current_user, error_body, status_code = PSOAuthService.authenticate_request()
@@ -209,6 +216,7 @@ class PSOAPI:
                 return error_body, status_code
 
             response = jsonify({
+                'message': 'Member card updated.',
                 'card': card
             })
             response.status_code = status_code

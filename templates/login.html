@@ -2,41 +2,47 @@
 {% set project = "Login" %}
 
 {% block body %}
-    <!-- Start of body content specific to page -->
-    <div class="px-5 py-5 mx-auto">
+    <div class="page-shell">
         <div class="container py-4">
-            <header class="pb-3 mb-4 border-bottom border-primary text-light">
-                <span class="fs-4">Login Page</span>
-            </header>
-        </div>
-    
-        <div class="container py-4 text-light bg-primary">
-    
-            <div class="container bg-secondary py-4">
-                <div class="p-5 mb-4 bg-light text-dark rounded-3">
-                    <form name="f" action="{{ url_for('login') }}" method="POST">
-                        <table>
-                            {% if error %}
-                                <tr class="alert alert-error">
-                                    Invalid username and password.
-                                </tr>
-                            {% endif %}
-                            {% if logout %}
-                                <tr class="alert alert-success">
-                                    You have been logged out.
-                                </tr>
-                            {% endif %}
-                            <tr><th><label for="username">User ID</label></th></tr>
-                            <tr><td><input id='username' name="username" size="20" required></td></tr>
-                            <tr><th><label for="password">Password</label></th></tr>
-                            <tr><td><input type="password" id="password" name="password" size="20" required></td></tr>
-                            <!-- Hidden input for 'next' page, which is set on unauthorized redirects -->
-                            <input type="hidden" name="next" value="{{ next }}">
-                            <tr><th><input type="submit" value="Submit"></th></tr>
-                        </table>
-                    </form>
-                </div>
+            <div class="row justify-content-center">
+                <div class="col-lg-8 col-xl-7">
+                    <div class="themed-panel rounded-3 p-4 p-md-5">
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+                            <div>
+                                <p style="margin: 0; color: var(--pso-orange); letter-spacing: 0.16em; text-transform: uppercase; font-size: 0.82rem;">Poway Orchestra</p>
+                                <h1 class="page-title mb-2" style="font-size: clamp(2rem, 4vw, 3.2rem);">Stage Door Login</h1>
+                                <p class="mb-0" style="font-size: 1.15rem; max-width: 34rem;">Access the musician console, member cards, and orchestra admin tools from a single branded backend.</p>
+                            </div>
+                            <div style="width: 88px; height: 88px; border-radius: 24px; display: flex; align-items: center; justify-content: center; background: linear-gradient(160deg, var(--pso-red), var(--pso-orange)); color: var(--pso-cream); font-size: 2rem; box-shadow: 0 12px 26px rgba(62, 39, 35, 0.22);">♫</div>
+                        </div>
 
+                        {% if error %}
+                            <div class="alert alert-error mb-3">Invalid username and password.</div>
+                        {% endif %}
+                        {% if logout %}
+                            <div class="alert alert-success mb-3">You have been logged out.</div>
+                        {% endif %}
+
+                        <form name="f" action="{{ url_for('login') }}" method="POST">
+                            <div class="row g-4">
+                                <div class="col-12">
+                                    <label for="username" class="form-label" style="font-size: 1.08rem;">User ID</label>
+                                    <input class="form-control" id="username" name="username" required>
+                                </div>
+                                <div class="col-12">
+                                    <label for="password" class="form-label" style="font-size: 1.08rem;">Password</label>
+                                    <input class="form-control" type="password" id="password" name="password" required>
+                                </div>
+                                <input type="hidden" name="next" value="{{ next }}">
+                                <div class="col-12 d-flex align-items-center justify-content-between flex-wrap gap-3">
+                                    <p class="mb-0" style="color: rgba(62, 39, 35, 0.72);">Palette: muted wine, burnt orange, cream, deep brown, and soft peach.</p>
+                                    <input class="btn btn-primary px-4 py-2" type="submit" value="Enter Orchestra Portal">
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 {% endblock %}

@@ -1,70 +1,178 @@
 {% extends "layouts/base.html" %}
 {% set project = "Home" %}
 
-{% block head %}
-    <script defer src="{{ url_for('static', filename='js/titanic.js') }}"></script>
-{% endblock %}
-
 {% block style %}
     <style>
-        .feature-panel {
-            background: linear-gradient(135deg, rgba(248, 249, 250, 0.92), rgba(205, 226, 255, 0.88));
-            border: 0;
-            border-radius: 1.25rem;
-            box-shadow: 0 20px 45px rgba(13, 27, 62, 0.18);
+        .home-title {
+            color: var(--pso-brown);
+            font-size: clamp(2rem, 5vw, 3.4rem);
+            margin-bottom: 0.75rem;
+            text-shadow: 0 8px 26px rgba(250, 243, 224, 0.45);
         }
 
-        .feature-panel .card-title,
-        .feature-panel .card-text,
-        .feature-panel label,
-        .feature-panel li,
-        .feature-panel p,
-        .feature-panel h2,
-        .feature-panel h5,
-        .feature-panel h6,
-        .feature-panel span {
-            color: #11213b;
+        .home-subtitle {
+            color: rgba(62, 39, 35, 0.82);
+            font-size: 1.22rem;
+            max-width: 52rem;
+            margin-bottom: 2.2rem;
         }
 
-        .titanic-shell {
-            background: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(226, 239, 255, 0.82));
-            border-radius: 1.75rem;
-            box-shadow: 0 30px 60px rgba(9, 30, 66, 0.25);
+        .home-section-title {
+            color: var(--pso-brown);
+            font-size: clamp(1.5rem, 3vw, 2.15rem);
+            margin: 2.75rem 0 1.25rem;
+        }
+
+        .home-card {
+            border: 1px solid rgba(62, 39, 35, 0.10);
+            border-radius: 1.6rem;
             overflow: hidden;
+            background: linear-gradient(180deg, rgba(255, 251, 245, 0.96), rgba(250, 243, 224, 0.94));
+            box-shadow: 0 24px 50px rgba(62, 39, 35, 0.12);
+            transition: transform 180ms ease, box-shadow 180ms ease;
         }
 
-        .titanic-accent {
-            background: radial-gradient(circle at top left, rgba(19, 84, 122, 0.95), rgba(18, 45, 77, 0.96));
-            color: #f5f7fb;
+        .home-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 30px 60px rgba(62, 39, 35, 0.16);
         }
 
-        .metric-chip {
+        .home-card .card-img-top {
+            height: 250px;
+            object-fit: cover;
+            filter: sepia(0.22) saturate(0.86) contrast(1.02);
+        }
+
+        .home-card .card-body {
+            padding: 1.6rem 1.5rem 1.5rem;
+            color: var(--pso-brown);
+            background:
+                linear-gradient(180deg, rgba(255, 250, 242, 0.98), rgba(250, 243, 224, 0.95)),
+                radial-gradient(circle at top right, rgba(242, 166, 160, 0.16), transparent 28%);
+        }
+
+        .home-card .card-title,
+        .home-card .card-text,
+        .home-card li {
+            color: var(--pso-brown);
+        }
+
+        .home-card .card-title {
+            font-size: 1.35rem;
+            line-height: 1.35;
+            margin-bottom: 1rem;
+        }
+
+        .home-card mark {
+            padding: 0.1em 0.35em;
+            border-radius: 999px;
+            background: rgba(242, 166, 160, 0.34);
+            color: var(--pso-red);
+        }
+
+        .home-card ol {
+            margin-bottom: 0;
+            padding-left: 1.2rem;
+        }
+
+        .home-card li {
+            margin-bottom: 0.55rem;
+            font-size: 1.04rem;
+        }
+
+        .home-card .btn {
+            margin-top: 1.1rem;
+            border-radius: 999px;
+            padding: 0.65rem 1.1rem;
+            background: linear-gradient(90deg, var(--pso-red), var(--pso-orange));
+            border: none;
+            color: var(--pso-cream);
+            box-shadow: 0 12px 24px rgba(158, 42, 43, 0.18);
+        }
+
+        .home-card .btn:hover {
+            background: linear-gradient(90deg, #842123, #b85d08);
+            color: var(--pso-cream);
+        }
+
+        .pso-focus-card {
+            position: relative;
+            background:
+                radial-gradient(circle at top right, rgba(242, 166, 160, 0.14), transparent 32%),
+                linear-gradient(160deg, #7b2d2f 0%, #6a2529 42%, #56302a 100%) !important;
+            border-color: rgba(250, 243, 224, 0.12) !important;
+            box-shadow: 0 28px 60px rgba(62, 39, 35, 0.20);
+        }
+
+        .pso-focus-card .card-body {
+            background: transparent !important;
+            color: var(--pso-cream);
+            padding: 1.7rem 1.6rem 1.55rem;
+        }
+
+        .pso-focus-card .card-title,
+        .pso-focus-card .card-text,
+        .pso-focus-card li,
+        .pso-focus-card p {
+            color: var(--pso-cream);
+        }
+
+        .pso-focus-card mark {
+            background: rgba(242, 166, 160, 0.26);
+            color: var(--pso-cream);
+        }
+
+        .pso-focus-card .btn {
+            background: linear-gradient(90deg, #f0b1aa, #e3a35d);
+            color: #4a2823;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+        }
+
+        .pso-focus-card .btn:hover {
+            background: linear-gradient(90deg, #f5c0bb, #ebb26f);
+            color: #4a2823;
+        }
+
+        .pso-card-kicker {
             display: inline-block;
-            padding: 0.4rem 0.75rem;
+            margin-bottom: 0.8rem;
+            padding: 0.35rem 0.7rem;
             border-radius: 999px;
-            background: rgba(255, 255, 255, 0.18);
-            margin-right: 0.5rem;
-            margin-bottom: 0.5rem;
+            background: rgba(250, 243, 224, 0.10);
+            color: #f3c2bc;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            font-size: 0.78rem;
         }
 
-        .result-meter {
-            height: 0.85rem;
-            border-radius: 999px;
-            background: rgba(17, 33, 59, 0.12);
-            overflow: hidden;
+        .card-column {
+            margin-bottom: 1.5rem;
         }
 
-        .result-meter span {
-            display: block;
-            height: 100%;
+        body.dark-mode .home-title {
+            color: var(--pso-cream);
+            text-shadow: none;
         }
 
-        .survive-bar {
-            background: linear-gradient(90deg, #1d976c, #93f9b9);
+        body.dark-mode .home-subtitle,
+        body.dark-mode .home-section-title {
+            color: var(--pso-cream);
         }
 
-        .die-bar {
-            background: linear-gradient(90deg, #c33764, #f7b733);
+        body.dark-mode .home-card {
+            background: linear-gradient(180deg, rgba(58, 35, 31, 0.96), rgba(44, 24, 20, 0.94));
+            border-color: rgba(250, 243, 224, 0.10);
+            box-shadow: 0 24px 50px rgba(0, 0, 0, 0.24);
+        }
+
+        body.dark-mode .home-card .card-body {
+            background: linear-gradient(180deg, rgba(62, 39, 35, 0.98), rgba(46, 25, 20, 0.98));
+        }
+
+        body.dark-mode .home-card .card-title,
+        body.dark-mode .home-card .card-text,
+        body.dark-mode .home-card li {
+            color: var(--pso-cream);
         }
     </style>
 {% endblock %}
@@ -72,11 +180,66 @@
 {% block body %}
     <!-- Start of body content specific to page -->
     <div class="px-5 py-5 mx-auto">
-        <h1 class="text-white"><strong>Python Home Page</strong></h1>
+        <h1 class="home-title"><strong>Poway Orchestra Backend</strong></h1>
+        <p class="home-subtitle">Make the Poway sections the center of the backend. Start with your orchestra user directories, approved members, and administrative accounts, then drop into the broader Flask and Python tools below.</p>
+
+        <h2 class="home-section-title">Poway Sections</h2>
         <div class="row">
-            <div class="col-4">
-                <div class="card">
-                    <img class="card-img-top" src="{{ url_for('static', filename='assets/python.jpeg') }}" alt="Python Development" height="250">
+            <div class="col-lg-4 card-column">
+                <div class="card home-card pso-focus-card h-100">
+                    <div class="card-body">
+                    <span class="pso-card-kicker">PSO Data</span>
+                    <h5 class="card-title">Browse <mark>Poway users</mark></h5>
+                    <p class="card-text">
+                        <ol>
+                            <li>See every PSO account stored in the orchestra site database.</li>
+                            <li>Review names, emails, roles, and creation timestamps in one table.</li>
+                            <li>Use this as the main directory for member and admin account tracking.</li>
+                        </ol>
+                    </p>
+                    <a href="{{ url_for('pso_users') }}" class="btn">Open PSO Users</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4 card-column">
+                <div class="card home-card pso-focus-card h-100">
+                    <div class="card-body">
+                    <span class="pso-card-kicker">PSO Data</span>
+                    <h5 class="card-title">Track approved <mark>members</mark></h5>
+                    <p class="card-text">
+                        <ol>
+                            <li>Review approved orchestra members and their current section assignments.</li>
+                            <li>See instrument, section, approval time, and approving admin together.</li>
+                            <li>Use this as the roster view for active Poway Symphony participants.</li>
+                        </ol>
+                    </p>
+                    <a href="{{ url_for('pso_members') }}" class="btn">Open PSO Members</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4 card-column">
+                <div class="card home-card pso-focus-card h-100">
+                    <div class="card-body">
+                    <span class="pso-card-kicker">PSO Data</span>
+                    <h5 class="card-title">Review <mark>created member cards</mark></h5>
+                    <p class="card-text">
+                        <ol>
+                            <li>See every saved Poway orchestra member card in one place.</li>
+                            <li>Track the owner, section family, instrument title, and creator.</li>
+                            <li>Use this view to review and manage the published card directory.</li>
+                        </ol>
+                    </p>
+                    <a href="{{ url_for('pso_member_cards') }}" class="btn">Open Member Cards</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="home-section-title">Platform Reference</h2>
+        <div class="row">
+            <div class="col-lg-4 card-column">
+                <div class="card home-card h-100">
+                    <img class="card-img-top" src="{{ url_for('static', filename='assets/python.jpeg') }}" alt="Python Development">
                     <div class="card-body">
                     <h5 class="card-title">What should <mark>Student Developers learn</mark>?</h5>
                     <p class="card-text">
@@ -88,13 +251,13 @@
                             <li>API and Microservice using Flask.  Mastering development techniques in creating and consuming RESTful APIs</li>
                         </ol>
                     </p>
-                    <a href="#" class="btn btn-primary">Go somewhere</a>
+                    <a href="#" class="btn">Explore Python</a>
                     </div>
                 </div>
             </div>
-            <div class="col-4">
-                <div class="card">
-                    <img class="card-img-top" src="{{ url_for('static', filename='assets/flask.png') }}" alt="Flask Development" height="250">
+            <div class="col-lg-4 card-column">
+                <div class="card home-card h-100">
+                    <img class="card-img-top" src="{{ url_for('static', filename='assets/flask.png') }}" alt="Flask Development">
                     <div class="card-body">
                     <h5 class="card-title">What is <mark>Flask</mark>? How do I start Web development?</h5>
                     <p class="card-text">
@@ -105,13 +268,13 @@
                             <li>Jinja2 is a server-side Python like template engine, supports HTML5 web development, and provides full integration with Flask.</li>
                         </ol>
                     </p>
-                    <a href="#" class="btn btn-primary">Go somewhere</a>
+                    <a href="#" class="btn">Explore Flask</a>
                     </div>
                 </div>
             </div>
-            <div class="col-4">
-                <div class="card">
-                    <img class="card-img-top" src="{{ url_for('static', filename='assets/pythondb.png') }}" alt="Backend and Persistence" height="250">
+            <div class="col-lg-4 card-column">
+                <div class="card home-card h-100">
+                    <img class="card-img-top" src="{{ url_for('static', filename='assets/pythondb.png') }}" alt="Backend and Persistence">
                     <div class="card-body">
                     <h5 class="card-title">How do you manage <mark>Persistent data</mark> with Python?</h5>
                     <p class="card-text">
@@ -122,116 +285,11 @@
                             <li>There are many newer and sometimes easier Database languages and frameworks.  Mongo, DynamoDB, Neo4J are Databases being used by students developers in last 3 years.</li>
                         </ol>
                     </p>
-                    <a href="#" class="btn btn-primary">Go somewhere</a>
+                    <a href="#" class="btn">Explore Data</a>
                     </div>
                 </div>
             </div>
-            
         </div>
 
-        <div class="titanic-shell mt-5">
-            <div class="row g-0">
-                <div class="col-lg-5 titanic-accent p-4 p-lg-5">
-                    <p class="text-uppercase small mb-2">Model • View • Control</p>
-                    <h2 class="display-6 fw-bold">Improve your chances</h2>
-                    <p class="mb-4">This Titanic demo uses a Python model, a Flask API controller, and a JavaScript view to estimate survival odds and suggest historically stronger conditions.</p>
-                    <div class="metric-chip">Held-out accuracy: <strong id="model-accuracy">Loading...</strong></div>
-                    <div class="metric-chip">Top signals: <span id="feature-summary">Loading...</span></div>
-                    <p id="titanic-status" class="text-light-emphasis mt-4 mb-0">Enter a passenger profile to evaluate the baseline scenario.</p>
-                </div>
-                <div class="col-lg-7 p-4 p-lg-5">
-                    <div class="row g-4">
-                        <div class="col-md-6">
-                            <div class="card feature-panel h-100">
-                                <div class="card-body">
-                                    <h5 class="card-title">Passenger profile</h5>
-                                    <form id="titanic-form" class="row g-3">
-                                        <div class="col-sm-6">
-                                            <label for="pclass" class="form-label">Class</label>
-                                            <select class="form-select" id="pclass" name="pclass">
-                                                <option value="1">1st</option>
-                                                <option value="2" selected>2nd</option>
-                                                <option value="3">3rd</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-sm-6">
-                                            <label for="sex" class="form-label">Sex</label>
-                                            <select class="form-select" id="sex" name="sex">
-                                                <option value="female">Female</option>
-                                                <option value="male" selected>Male</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-sm-6">
-                                            <label for="age" class="form-label">Age</label>
-                                            <input class="form-control" id="age" name="age" type="number" min="1" max="90" value="30" required>
-                                        </div>
-                                        <div class="col-sm-6">
-                                            <label for="fare" class="form-label">Fare</label>
-                                            <input class="form-control" id="fare" name="fare" type="number" min="0" step="0.01" value="25.00" required>
-                                        </div>
-                                        <div class="col-sm-6">
-                                            <label for="sibsp" class="form-label">Siblings / spouse</label>
-                                            <input class="form-control" id="sibsp" name="sibsp" type="number" min="0" value="0" required>
-                                        </div>
-                                        <div class="col-sm-6">
-                                            <label for="parch" class="form-label">Parents / children</label>
-                                            <input class="form-control" id="parch" name="parch" type="number" min="0" value="0" required>
-                                        </div>
-                                        <div class="col-sm-6">
-                                            <label for="embarked" class="form-label">Embarked</label>
-                                            <select class="form-select" id="embarked" name="embarked">
-                                                <option value="C">Cherbourg</option>
-                                                <option value="Q">Queenstown</option>
-                                                <option value="S" selected>Southampton</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-sm-6">
-                                            <label for="alone" class="form-label">Traveling alone</label>
-                                            <select class="form-select" id="alone" name="alone">
-                                                <option value="true" selected>Yes</option>
-                                                <option value="false">No</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-12">
-                                            <button class="btn btn-primary w-100" type="submit">Estimate survival</button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card feature-panel h-100">
-                                <div class="card-body">
-                                    <h5 class="card-title">Prediction</h5>
-                                    <div class="mb-3">
-                                        <div class="d-flex justify-content-between">
-                                            <span>Survive</span>
-                                            <strong id="survive-value">--</strong>
-                                        </div>
-                                        <div class="result-meter mt-2"><span id="survive-bar" class="survive-bar" style="width: 0%"></span></div>
-                                    </div>
-                                    <div class="mb-4">
-                                        <div class="d-flex justify-content-between">
-                                            <span>Die</span>
-                                            <strong id="die-value">--</strong>
-                                        </div>
-                                        <div class="result-meter mt-2"><span id="die-bar" class="die-bar" style="width: 0%"></span></div>
-                                    </div>
-                                    <h6>Top passenger factors</h6>
-                                    <ul id="titanic-factors" class="mb-4">
-                                        <li>Submit the form to see which features helped or hurt this passenger most.</li>
-                                    </ul>
-                                    <h6>Improve your chances</h6>
-                                    <p id="improvement-summary" class="mb-2">The model will suggest historically stronger conditions when they improve the forecast.</p>
-                                    <ul id="titanic-changes" class="mb-0">
-                                        <li>Suggested adjustments will appear here after prediction.</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 {% endblock %}

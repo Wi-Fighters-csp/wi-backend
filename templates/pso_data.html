@@ -1,0 +1,195 @@
+{% extends "layouts/base.html" %}
+
+{% set project = page_title %}
+
+{% block body %}
+<div class="container mt-5">
+    <h1>{{ page_title }}</h1>
+
+    {% if rows %}
+    <table class="table table-striped table-hover" id="{{ table_id }}">
+        <thead>
+            <tr>
+                {% for key, label in columns %}
+                <th>{{ label }}</th>
+                {% endfor %}
+                {% if current_user.role == 'Admin' %}
+                <th>Actions</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                {% for key, label in columns %}
+                <td>{{ row.get(key, 'N/A') }}</td>
+                {% endfor %}
+                {% if current_user.role == 'Admin' %}
+                <td>
+                    <button class="btn btn-primary btn-sm pso-edit-btn" data-page-type="{{ page_type }}" data-uid="{{ row.get('uid', '') }}">Edit</button>
+                    <button class="btn btn-danger btn-sm pso-delete-btn" data-page-type="{{ page_type }}" data-uid="{{ row.get('uid', '') }}">Delete</button>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="alert alert-info" role="alert">
+        No data found.
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    $(document).ready(function () {
+        $("#{{ table_id }}").DataTable({
+            pageLength: 25,
+            order: []
+        });
+
+        function endpointFor(pageType, uid) {
+            if (pageType === 'members') {
+                return `/pso/members/${uid}`;
+            }
+            if (pageType === 'member_cards') {
+                return `/pso/member-cards/${uid}`;
+            }
+            return `/pso/users/${uid}`;
+        }
+
+        function buildPayload(pageType, row) {
+            if (pageType === 'members') {
+                const name = prompt('Edit member name:', row.children[2].innerText.trim());
+                if (name === null) {
+                    return null;
+                }
+                const email = prompt('Edit member email:', row.children[3].innerText.trim());
+                if (email === null) {
+                    return null;
+                }
+                const instrument = prompt('Edit instrument:', row.children[4].innerText.trim());
+                if (instrument === null) {
+                    return null;
+                }
+                const section = prompt('Edit section:', row.children[5].innerText.trim());
+                if (section === null) {
+                    return null;
+                }
+                const practiceTime = prompt('Edit practice time:', row.children[6].innerText.trim());
+                if (practiceTime === null) {
+                    return null;
+                }
+
+                return {
+                    name,
+                    email,
+                    instrument,
+                    section,
+                    practice_time: practiceTime
+                };
+            }
+
+            if (pageType === 'member_cards') {
+                const ownerUid = prompt('Edit owner UID:', row.children[1].innerText.trim());
+                if (ownerUid === null) {
+                    return null;
+                }
+                const ownerName = prompt('Edit owner name:', row.children[2].innerText.trim());
+                if (ownerName === null) {
+                    return null;
+                }
+                const family = prompt('Edit family:', row.children[3].innerText.trim());
+                if (family === null) {
+                    return null;
+                }
+                const sectionId = prompt('Edit section:', row.children[4].innerText.trim());
+                if (sectionId === null) {
+                    return null;
+                }
+                const instrumentTitle = prompt('Edit instrument title:', row.children[5].innerText.trim());
+                if (instrumentTitle === null) {
+                    return null;
+                }
+
+                return {
+                    owner_uid: ownerUid,
+                    owner_name: ownerName,
+                    family,
+                    section_id: sectionId,
+                    instrument_title: instrumentTitle
+                };
+            }
+
+            const name = prompt('Edit user name:', row.children[2].innerText.trim());
+            if (name === null) {
+                return null;
+            }
+            const email = prompt('Edit user email:', row.children[3].innerText.trim());
+            if (email === null) {
+                return null;
+            }
+            const role = prompt('Edit user role:', row.children[4].innerText.trim());
+            if (role === null) {
+                return null;
+            }
+
+            return {
+                name,
+                email,
+                role
+            };
+        }
+
+        document.querySelectorAll('.pso-edit-btn').forEach((button) => {
+            button.addEventListener('click', async function () {
+                const row = this.closest('tr');
+                const pageType = this.dataset.pageType;
+                const uid = this.dataset.uid;
+                const payload = buildPayload(pageType, row);
+
+                if (!payload) {
+                    return;
+                }
+
+                const response = await fetch(endpointFor(pageType, uid), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    alert(data.message || data.error || 'Failed to update item.');
+                    return;
+                }
+
+                location.reload();
+            });
+        });
+
+        document.querySelectorAll('.pso-delete-btn').forEach((button) => {
+            button.addEventListener('click', async function () {
+                const pageType = this.dataset.pageType;
+                const uid = this.dataset.uid;
+                if (!confirm(`Delete ${uid}?`)) {
+                    return;
+                }
+
+                const response = await fetch(endpointFor(pageType, uid), {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    alert(data.message || data.error || 'Failed to delete item.');
+                    return;
+                }
+
+                location.reload();
+            });
+        });
+    });
+</script>
+{% endblock %}
+
+{% block background %}{% endblock %}

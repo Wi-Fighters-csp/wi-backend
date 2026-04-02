@@ -34,6 +34,7 @@ from model.user import User, initUsers
 from model.user import Section;
 from model.github import GitHubUser
 from model.feedback import Feedback
+from model.pso import PSOAuthService
 from api.analytics import get_date_range
 # from api.grade_api import grade_api
 from api.study import study_api
@@ -165,6 +166,165 @@ def sections():
 def persona():
     personas = Persona.query.all()
     return render_template("persona.html", personas=personas)
+
+def require_site_admin():
+    if current_user.role != 'Admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    return None
+
+@app.route('/pso/users')
+@login_required
+def pso_users():
+    return render_template(
+        'pso_data.html',
+        page_title='PSO Users',
+        page_type='users',
+        table_id='psoUsersTable',
+        columns=[
+            ('id', 'ID'),
+            ('uid', 'UID'),
+            ('name', 'Name'),
+            ('email', 'Email'),
+            ('role', 'Role'),
+            ('created_at', 'Created'),
+        ],
+        rows=PSOAuthService.list_users()
+    )
+
+@app.route('/pso/members')
+@login_required
+def pso_members():
+    return render_template(
+        'pso_data.html',
+        page_title='PSO Members',
+        page_type='members',
+        table_id='psoMembersTable',
+        columns=[
+            ('id', 'ID'),
+            ('uid', 'UID'),
+            ('name', 'Name'),
+            ('email', 'Email'),
+            ('instrument', 'Instrument'),
+            ('section', 'Section'),
+            ('practice_time', 'Practice Time'),
+            ('approved_at', 'Approved At'),
+            ('approved_by_uid', 'Approved By'),
+        ],
+        rows=PSOAuthService.list_members()
+    )
+
+@app.route('/pso/member-cards')
+@login_required
+def pso_member_cards():
+    return render_template(
+        'pso_data.html',
+        page_title='Created Member Cards',
+        page_type='member_cards',
+        table_id='psoMemberCardsTable',
+        columns=[
+            ('id', 'ID'),
+            ('owner_uid', 'Owner UID'),
+            ('owner_name', 'Owner Name'),
+            ('family', 'Family'),
+            ('section_id', 'Section'),
+            ('instrument_title', 'Instrument Title'),
+            ('created_by_uid', 'Created By'),
+            ('updated_at', 'Updated At'),
+        ],
+        rows=PSOAuthService.list_member_cards()
+    )
+
+@app.route('/pso/users/<string:uid>', methods=['PUT'])
+@login_required
+def update_pso_user(uid):
+    admin_error = require_site_admin()
+    if admin_error:
+        return admin_error
+
+    updated_user, error_body, status_code = PSOAuthService.update_pso_user(uid, request.get_json() or {})
+    if error_body:
+        return jsonify(error_body), status_code
+
+    return jsonify({'message': 'PSO user updated successfully.', 'user': updated_user}), status_code
+
+@app.route('/pso/users/<string:uid>', methods=['DELETE'])
+@login_required
+def delete_pso_user(uid):
+    admin_error = require_site_admin()
+    if admin_error:
+        return admin_error
+
+    deleted, error_body, status_code = PSOAuthService.delete_pso_user(uid)
+    if error_body:
+        return jsonify(error_body), status_code
+
+    return jsonify({'message': 'PSO user deleted successfully.'}), status_code
+
+@app.route('/pso/members/<string:uid>', methods=['PUT'])
+@login_required
+def update_pso_member(uid):
+    admin_error = require_site_admin()
+    if admin_error:
+        return admin_error
+
+    updated_member, error_body, status_code = PSOAuthService.update_member(uid, request.get_json() or {})
+    if error_body:
+        return jsonify(error_body), status_code
+
+    return jsonify({'message': 'PSO member updated successfully.', 'member': updated_member}), status_code
+
+@app.route('/pso/members/<string:uid>', methods=['DELETE'])
+@login_required
+def delete_pso_member(uid):
+    admin_error = require_site_admin()
+    if admin_error:
+        return admin_error
+
+    deleted, error_body, status_code = PSOAuthService.delete_member(uid)
+    if error_body:
+        return jsonify(error_body), status_code
+
+    return jsonify({'message': 'PSO member deleted successfully.'}), status_code
+
+def require_pso_admin_actor():
+    actor = PSOAuthService.find_user_by_uid(current_user.uid)
+    if actor is None or not actor.is_admin():
+        return None, (jsonify({'error': 'Unauthorized'}), 403)
+    return actor, None
+
+@app.route('/pso/member-cards/<int:card_id>', methods=['PUT'])
+@login_required
+def update_pso_member_card(card_id):
+    admin_error = require_site_admin()
+    if admin_error:
+        return admin_error
+
+    actor, actor_error = require_pso_admin_actor()
+    if actor_error:
+        return actor_error
+
+    updated_card, error_body, status_code = PSOAuthService.update_member_card(card_id, actor, request.get_json() or {})
+    if error_body:
+        return jsonify(error_body), status_code
+
+    return jsonify({'message': 'PSO member card updated successfully.', 'card': updated_card}), status_code
+
+@app.route('/pso/member-cards/<int:card_id>', methods=['DELETE'])
+@login_required
+def delete_pso_member_card(card_id):
+    admin_error = require_site_admin()
+    if admin_error:
+        return admin_error
+
+    actor, actor_error = require_pso_admin_actor()
+    if actor_error:
+        return actor_error
+
+    deleted, error_body, status_code = PSOAuthService.delete_member_card(card_id, actor)
+    if error_body:
+        return jsonify(error_body), status_code
+
+    return jsonify({'message': 'PSO member card deleted successfully.'}), status_code
 
 # Helper function to extract uploads for a user (ie PFP image)
 @app.route('/uploads/<path:filename>')

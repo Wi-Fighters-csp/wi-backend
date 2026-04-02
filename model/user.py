@@ -3,6 +3,7 @@ from flask import current_app
 from flask_login import UserMixin
 from datetime import date
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import inspect, text
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import json
@@ -151,6 +152,9 @@ class User(db.Model, UserMixin):
     _password = db.Column(db.String(255), unique=False, nullable=False)
     _role = db.Column(db.String(20), default="User", nullable=False)
     _pfp = db.Column(db.String(255), unique=False, nullable=True)
+    _bio = db.Column('bio', db.Text, nullable=False, default='')
+    _favorite_performances = db.Column('favorite_performances', db.Text, nullable=False, default='')
+    _favorite_musicians = db.Column('favorite_musicians', db.Text, nullable=False, default='')
 
     # Define many-to-many relationship with Section model through UserSection table
     # Overlaps setting silences SQLAlchemy warnings about multiple relationship paths
@@ -164,13 +168,16 @@ class User(db.Model, UserMixin):
     personas = db.relationship('Persona', secondary='user_personas', lazy='subquery',
                                overlaps="user_personas_rel,persona,users")
     
-    def __init__(self, name, uid, password=app.config["DEFAULT_PASSWORD"], kasm_server_needed=False, role="User", pfp='', grade_data=None, ap_exam=None, school="Unknown", sid=None, classes=None):
+    def __init__(self, name, uid, password=app.config["DEFAULT_PASSWORD"], kasm_server_needed=False, role="User", pfp='', grade_data=None, ap_exam=None, school="Unknown", sid=None, classes=None, bio='', favorite_performances='', favorite_musicians=''):
         self._name = name
         self._uid = uid
         self._email = "?"
         self.set_password(password)
         self._role = role
         self._pfp = pfp
+        self.bio = bio
+        self.favorite_performances = favorite_performances
+        self.favorite_musicians = favorite_musicians
 
     # UserMixin/Flask-Login requires a get_id method to return the id as a string
     def get_id(self):
@@ -295,6 +302,36 @@ class User(db.Model, UserMixin):
     def pfp(self, pfp):
         self._pfp = pfp
 
+    @property
+    def bio(self):
+        return self._bio or ''
+
+    @bio.setter
+    def bio(self, bio):
+        self._bio = str(bio or '').strip()
+
+    @staticmethod
+    def normalize_profile_text(value, max_length=2000):
+        lines = [line.strip() for line in str(value or '').splitlines() if line.strip()]
+        normalized = '\n'.join(lines)
+        return normalized[:max_length]
+
+    @property
+    def favorite_performances(self):
+        return self._favorite_performances or ''
+
+    @favorite_performances.setter
+    def favorite_performances(self, favorite_performances):
+        self._favorite_performances = self.normalize_profile_text(favorite_performances)
+
+    @property
+    def favorite_musicians(self):
+        return self._favorite_musicians or ''
+
+    @favorite_musicians.setter
+    def favorite_musicians(self, favorite_musicians):
+        self._favorite_musicians = self.normalize_profile_text(favorite_musicians)
+
 
     # CRUD create/add a new record to the table
     # returns self or None on error
@@ -319,6 +356,11 @@ class User(db.Model, UserMixin):
             "email": self.email,
             "role": self.role,
             "pfp": self.pfp,
+            "bio": self.bio,
+            "favorite_performances": self.favorite_performances,
+            "favorite_musicians": self.favorite_musicians,
+            "favoritePerformances": self.favorite_performances,
+            "favoriteMusicians": self.favorite_musicians,
             "password": self._password,  # Only for internal use, not for API
         }
         sections = self.read_sections()
@@ -338,6 +380,9 @@ class User(db.Model, UserMixin):
         email = inputs.get("email", "")
         password = inputs.get("password", "")
         pfp = inputs.get("pfp", None)
+        bio = inputs.get("bio", None)
+        favorite_performances = inputs.get("favorite_performances", inputs.get("favoritePerformances", None))
+        favorite_musicians = inputs.get("favorite_musicians", inputs.get("favoriteMusicians", None))
         # States before update
         old_uid = self.uid
 
@@ -352,6 +397,12 @@ class User(db.Model, UserMixin):
             self.set_password(password)
         if pfp is not None:
             self.pfp = pfp
+        if bio is not None:
+            self.bio = bio
+        if favorite_performances is not None:
+            self.favorite_performances = favorite_performances
+        if favorite_musicians is not None:
+            self.favorite_musicians = favorite_musicians
 
         # Check this on each update
         if not email:
@@ -536,6 +587,27 @@ class User(db.Model, UserMixin):
             if os.path.exists(old_path):
                 os.rename(old_path, new_path)
 
+
+def ensure_user_schema():
+    with app.app_context():
+        inspector = inspect(db.engine)
+        if 'users' not in inspector.get_table_names():
+            return
+
+        columns = {column['name'] for column in inspector.get_columns('users')}
+        with db.engine.begin() as connection:
+            if 'bio' not in columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''"))
+                connection.execute(text("UPDATE users SET bio = '' WHERE bio IS NULL"))
+
+            if 'favorite_performances' not in columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN favorite_performances TEXT DEFAULT ''"))
+                connection.execute(text("UPDATE users SET favorite_performances = '' WHERE favorite_performances IS NULL"))
+
+            if 'favorite_musicians' not in columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN favorite_musicians TEXT DEFAULT ''"))
+                connection.execute(text("UPDATE users SET favorite_musicians = '' WHERE favorite_musicians IS NULL"))
+
 """Database Creation and Testing """
 
 # Builds working data set for testing
@@ -543,6 +615,7 @@ def initUsers():
     with app.app_context():
         """Create database and tables"""
         db.create_all()
+        ensure_user_schema()
         """Tester data for table"""
         
         default_grade_data = {
@@ -614,3 +687,6 @@ def initUsers():
         u2.add_section(s2)
         u2.add_section(s3)
         u3.add_section(s4)
+
+
+ensure_user_schema()

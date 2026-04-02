@@ -114,6 +114,9 @@ class UserAPI:
                 'uid': uid,
                 'password': password,
                 'email': body.get('email'),
+                'bio': body.get('bio'),
+                'favorite_performances': body.get('favorite_performances', body.get('favoritePerformances')),
+                'favorite_musicians': body.get('favorite_musicians', body.get('favoriteMusicians')),
             }
             
             # Add optional fields if they exist
@@ -231,7 +234,7 @@ class UserAPI:
             # Retrieve the current user from the token_required authentication check
             current_user = g.current_user
             # Read data from the JSON body of the request
-            body = request.get_json()
+            body = request.get_json() or {}
 
             ''' Admin-specific update handling '''
             if current_user.role == 'Admin':

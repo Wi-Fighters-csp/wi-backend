@@ -41,6 +41,8 @@ cors = CORS(
             'http://127.0.0.1:4600',
             'http://localhost:4000',
             'http://127.0.0.1:4000',
+            'https://wifighters.opencodingsociety.com',
+            'http://wifighters.opencodingsociety.com',
             'https://pso.opencodingsociety.com',
             'http://pso.opencodingsociety.com',
             'https://open-coding-society.github.io',

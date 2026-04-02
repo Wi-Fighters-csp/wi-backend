@@ -11,22 +11,27 @@
                             <div>
                                 <p style="margin: 0; color: var(--pso-orange); letter-spacing: 0.16em; text-transform: uppercase; font-size: 0.82rem;">Poway Orchestra</p>
                                 <h1 class="page-title mb-2" style="font-size: clamp(2rem, 4vw, 3.2rem);">Stage Door Login</h1>
-                                <p class="mb-0" style="font-size: 1.15rem; max-width: 34rem;">Access the musician console, member cards, and orchestra admin tools from a single branded backend.</p>
+                                <p class="mb-0" style="font-size: 1.15rem; max-width: 34rem;">Sign in with a Poway Orchestra account to access the musician console, member cards, and orchestra admin tools.</p>
                             </div>
                             <div style="width: 88px; height: 88px; border-radius: 24px; display: flex; align-items: center; justify-content: center; background: linear-gradient(160deg, var(--pso-red), var(--pso-orange)); color: var(--pso-cream); font-size: 2rem; box-shadow: 0 12px 26px rgba(62, 39, 35, 0.22);">♫</div>
                         </div>
 
                         {% if error %}
-                            <div class="alert alert-error mb-3">Invalid username and password.</div>
+                            <div class="alert alert-error mb-3">Invalid Poway Orchestra user ID or password. If you have not created a Poway account yet, sign up on the orchestra sign-in page first.</div>
                         {% endif %}
                         {% if logout %}
                             <div class="alert alert-success mb-3">You have been logged out.</div>
                         {% endif %}
 
+                        <div class="alert alert-info mb-3" role="alert">
+                            Use your Poway Orchestra account here. Main-site accounts do not automatically work unless that user has also been created in the Poway Orchestra database.
+                        </div>
+
                         <form name="f" action="{{ url_for('login') }}" method="POST">
                             <div class="row g-4">
                                 <div class="col-12">
                                     <label for="username" class="form-label" style="font-size: 1.08rem;">User ID</label>
+                                    <div style="color: rgba(62, 39, 35, 0.72); font-size: 0.95rem; margin-bottom: 0.35rem;">Enter your Poway user ID or the same identifier you used when creating your orchestra account.</div>
                                     <input class="form-control" id="username" name="username" required>
                                 </div>
                                 <div class="col-12">

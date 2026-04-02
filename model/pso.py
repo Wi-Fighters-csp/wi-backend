@@ -460,7 +460,9 @@ class PSOAuthService:
 
         user = PSOAuthService.find_user_by_identifier(identifier)
         if user is None or not check_password_hash(user.password_hash, password):
-            return None, {'message': 'Invalid user id or password'}, 401
+            return None, {
+                'message': 'Invalid Poway Orchestra user ID or password. If you have not created a Poway account yet, sign up first.'
+            }, 401
 
         return user, None, None
 

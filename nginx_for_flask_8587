@@ -26,13 +26,19 @@ server {
         if ($http_origin = "http://wifighters.opencodingsociety.com") {
             set $cors_origin $http_origin;
         }
+        if ($http_origin = "https://pso.opencodingsociety.com") {
+            set $cors_origin $http_origin;
+        }
+        if ($http_origin = "http://pso.opencodingsociety.com") {
+            set $cors_origin $http_origin;
+        }
         if ($http_origin = "https://open-coding-society.github.io") {
             set $cors_origin $http_origin;
         }
         if ($http_origin = "https://pages.opencodingsociety.com") {
             set $cors_origin $http_origin;
         }
-        if ($http_origin ~* "^https://([a-z0-9-]+\.)?opencodingsociety\.com$") {
+        if ($http_origin ~* "^https?://([a-z0-9-]+\.)?opencodingsociety\.com$") {
             set $cors_origin $http_origin;
         }
 

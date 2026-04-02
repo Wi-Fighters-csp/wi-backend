@@ -258,6 +258,40 @@ class PSOAuthService:
         return PSOUser(record)
 
     @staticmethod
+    def find_user_by_name(name):
+        PSOAuthService.ensure_database()
+        normalized_name = str(name or '').strip().lower()
+        if not normalized_name:
+            return None
+
+        with PSOAuthService.get_connection() as connection:
+            record = connection.execute(
+                'SELECT id, uid, name, email, password_hash, role FROM users WHERE LOWER(TRIM(name)) = ? LIMIT 1',
+                (normalized_name,)
+            ).fetchone()
+
+        if record is None:
+            return None
+
+        return PSOUser(record)
+
+    @staticmethod
+    def find_user_by_identifier(identifier):
+        normalized_identifier = str(identifier or '').strip()
+        if not normalized_identifier:
+            return None
+
+        user = PSOAuthService.find_user_by_uid(normalized_identifier)
+        if user is not None:
+            return user
+
+        user = PSOAuthService.find_user_by_email(normalized_identifier.lower())
+        if user is not None:
+            return user
+
+        return PSOAuthService.find_user_by_name(normalized_identifier)
+
+    @staticmethod
     def list_users():
         PSOAuthService.ensure_database()
         with PSOAuthService.get_connection() as connection:
@@ -415,16 +449,16 @@ class PSOAuthService:
         return True, None, None
 
     @staticmethod
-    def authenticate(uid, password):
+    def authenticate(identifier, password):
         PSOAuthService.ensure_database()
 
-        if uid is None or len(str(uid).strip()) == 0:
+        if identifier is None or len(str(identifier).strip()) == 0:
             return None, {'message': 'User ID is missing'}, 401
 
         if password is None or len(str(password)) == 0:
             return None, {'message': 'Password is missing'}, 401
 
-        user = PSOAuthService.find_user_by_uid(uid)
+        user = PSOAuthService.find_user_by_identifier(identifier)
         if user is None or not check_password_hash(user.password_hash, password):
             return None, {'message': 'Invalid user id or password'}, 401
 

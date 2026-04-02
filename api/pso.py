@@ -73,7 +73,7 @@ class PSOAPI:
             return jsonify({'message': 'OK'})
 
         def post(self):
-            body = request.get_json()
+            body = request.get_json() or {}
             if not body:
                 return {
                     'message': 'Please provide user details',
@@ -81,9 +81,25 @@ class PSOAPI:
                     'error': 'Bad request'
                 }, 400
 
-            user, error_body, status_code = PSOAuthService.authenticate(
-                body.get('uid'),
+            identifier = (
+                body.get('uid')
+                or body.get('username')
+                or body.get('userId')
+                or body.get('user_id')
+                or body.get('login')
+                or body.get('email')
+                or body.get('name')
+            )
+
+            password = (
                 body.get('password')
+                or body.get('newPassword')
+                or body.get('new_password')
+            )
+
+            user, error_body, status_code = PSOAuthService.authenticate(
+                identifier,
+                password
             )
             if error_body:
                 return error_body, status_code

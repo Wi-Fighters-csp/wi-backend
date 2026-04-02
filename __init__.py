@@ -41,11 +41,14 @@ cors = CORS(
             'http://127.0.0.1:4600',
             'http://localhost:4000',
             'http://127.0.0.1:4000',
+            'https://pso.opencodingsociety.com',
+            'http://pso.opencodingsociety.com',
             'https://open-coding-society.github.io',
             'https://pages.opencodingsociety.com',
          ],
          "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
          "allow_headers": ["Content-Type", "X-Origin", "Authorization"],
+         "supports_credentials": True,
       }
    }
 )

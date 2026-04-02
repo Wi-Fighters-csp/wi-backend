@@ -20,20 +20,30 @@ server {
         proxy_set_header Host $host;
 
         set $cors_origin "";
-        if ($http_origin ~* "^https://(.*\.)?opencodingsociety\.com$") {
+        if ($http_origin = "https://pso.opencodingsociety.com") {
+            set $cors_origin $http_origin;
+        }
+        if ($http_origin = "http://pso.opencodingsociety.com") {
             set $cors_origin $http_origin;
         }
         if ($http_origin = "https://open-coding-society.github.io") {
             set $cors_origin $http_origin;
         }
+        if ($http_origin = "https://pages.opencodingsociety.com") {
+            set $cors_origin $http_origin;
+        }
+        if ($http_origin ~* "^https://([a-z0-9-]+\.)?opencodingsociety\.com$") {
+            set $cors_origin $http_origin;
+        }
 
         add_header "Access-Control-Allow-Origin" "$cors_origin" always;
         add_header "Access-Control-Allow-Credentials" "true" always;
+        add_header "Access-Control-Allow-Headers" "Content-Type, X-Origin, Authorization, Origin, X-Requested-With, Accept" always;
+        add_header "Access-Control-Allow-Methods" "GET, POST, PATCH, PUT, DELETE, OPTIONS" always;
+        add_header "Vary" "Origin" always;
 
         if ($request_method = OPTIONS) {
-            add_header "Access-Control-Allow-Methods" "GET, POST, PUT, DELETE, OPTIONS, HEAD" always;
             add_header "Access-Control-Allow-MaxAge" 600 always;
-            add_header "Access-Control-Allow-Headers" "Authorization, Origin, X-Origin, X-Requested-With, Content-Type, Accept" always;
             return 204;
         }
     }

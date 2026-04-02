@@ -22,12 +22,16 @@
             {% for row in rows %}
             <tr>
                 {% for key, label in columns %}
+                {% if key == 'bio' %}
+                <td class="pso-bio-cell">{{ row.get(key) or 'N/A' }}</td>
+                {% else %}
                 <td>{{ row.get(key, 'N/A') }}</td>
+                {% endif %}
                 {% endfor %}
                 {% if current_user.role == 'Admin' %}
                 <td>
-                    <button class="btn btn-primary btn-sm pso-edit-btn" data-page-type="{{ page_type }}" data-uid="{{ row.get('uid', '') }}">Edit</button>
-                    <button class="btn btn-danger btn-sm pso-delete-btn" data-page-type="{{ page_type }}" data-uid="{{ row.get('uid', '') }}">Delete</button>
+                    <button class="btn btn-primary btn-sm pso-edit-btn" data-page-type="{{ page_type }}" data-uid="{{ row.get('uid', '') }}" data-record-id="{{ row.get('id', '') }}">Edit</button>
+                    <button class="btn btn-danger btn-sm pso-delete-btn" data-page-type="{{ page_type }}" data-uid="{{ row.get('uid', '') }}" data-record-id="{{ row.get('id', '') }}">Delete</button>
                 </td>
                 {% endif %}
             </tr>
@@ -48,14 +52,14 @@
             order: []
         });
 
-        function endpointFor(pageType, uid) {
+        function endpointFor(pageType, identifier) {
             if (pageType === 'members') {
-                return `/pso/members/${uid}`;
+                return `/pso/members/${identifier}`;
             }
             if (pageType === 'member_cards') {
-                return `/pso/member-cards/${uid}`;
+                return `/pso/member-cards/${identifier}`;
             }
-            return `/pso/users/${uid}`;
+            return `/pso/users/${identifier}`;
         }
 
         function buildPayload(pageType, row) {
@@ -111,13 +115,18 @@
                 if (instrumentTitle === null) {
                     return null;
                 }
+                const bio = prompt('Edit bio:', row.children[6].innerText.trim());
+                if (bio === null) {
+                    return null;
+                }
 
                 return {
                     owner_uid: ownerUid,
                     owner_name: ownerName,
                     family,
                     section_id: sectionId,
-                    instrument_title: instrumentTitle
+                    instrument_title: instrumentTitle,
+                    bio
                 };
             }
 
@@ -145,14 +154,14 @@
             button.addEventListener('click', async function () {
                 const row = this.closest('tr');
                 const pageType = this.dataset.pageType;
-                const uid = this.dataset.uid;
+                const identifier = pageType === 'member_cards' ? this.dataset.recordId : this.dataset.uid;
                 const payload = buildPayload(pageType, row);
 
                 if (!payload) {
                     return;
                 }
 
-                const response = await fetch(endpointFor(pageType, uid), {
+                const response = await fetch(endpointFor(pageType, identifier), {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -171,12 +180,12 @@
         document.querySelectorAll('.pso-delete-btn').forEach((button) => {
             button.addEventListener('click', async function () {
                 const pageType = this.dataset.pageType;
-                const uid = this.dataset.uid;
-                if (!confirm(`Delete ${uid}?`)) {
+                const identifier = pageType === 'member_cards' ? this.dataset.recordId : this.dataset.uid;
+                if (!confirm(`Delete ${identifier}?`)) {
                     return;
                 }
 
-                const response = await fetch(endpointFor(pageType, uid), {
+                const response = await fetch(endpointFor(pageType, identifier), {
                     method: 'DELETE'
                 });
                 const data = await response.json();
@@ -190,6 +199,14 @@
         });
     });
 </script>
+
+<style>
+    .pso-bio-cell {
+        max-width: 28rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+</style>
 {% endblock %}
 
 {% block background %}{% endblock %}

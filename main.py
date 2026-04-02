@@ -228,6 +228,7 @@ def pso_member_cards():
             ('family', 'Family'),
             ('section_id', 'Section'),
             ('instrument_title', 'Instrument Title'),
+            ('bio', 'Bio'),
             ('created_by_uid', 'Created By'),
             ('updated_at', 'Updated At'),
         ],

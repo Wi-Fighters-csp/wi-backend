@@ -47,6 +47,7 @@ cors = CORS(
             'http://pso.opencodingsociety.com',
             'https://open-coding-society.github.io',
             'https://pages.opencodingsociety.com',
+            'https://pso.opencodingsociety.com',
          ],
          "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
          "allow_headers": ["Content-Type", "X-Origin", "Authorization"],

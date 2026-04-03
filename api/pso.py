@@ -1,10 +1,12 @@
 from flask import Blueprint, jsonify, request
+from flask_cors import CORS
 from flask_restful import Api, Resource
 
 from model.pso import PSOAuthService
 
 
 pso_api = Blueprint('pso_api', __name__, url_prefix='/api')
+CORS(pso_api, supports_credentials=True)
 api = Api(pso_api)
 
 

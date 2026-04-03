@@ -932,6 +932,58 @@ class PSOAuthService:
         return PSOAuthService.progression_payload(record)
 
     @staticmethod
+    def list_progression_leaderboard(limit=None):
+        PSOAuthService.ensure_database()
+        query = (
+            '''
+            SELECT u.uid, u.name, u.email, u.role,
+                   COALESCE(up.xp, 0) AS xp,
+                   COALESCE(up.completed_quests, '[]') AS completed_quests,
+                   up.last_updated_at,
+                   om.instrument,
+                   om.section,
+                   CASE WHEN om.uid IS NOT NULL THEN 1 ELSE 0 END AS is_member
+            FROM users u
+            LEFT JOIN user_progression up ON up.uid = u.uid
+            LEFT JOIN orchestra_members om ON om.uid = u.uid
+            ORDER BY COALESCE(up.xp, 0) DESC,
+                     u.name COLLATE NOCASE ASC,
+                     u.uid COLLATE NOCASE ASC
+            '''
+        )
+        parameters = []
+
+        if isinstance(limit, int) and limit > 0:
+            query += ' LIMIT ?'
+            parameters.append(limit)
+
+        with PSOAuthService.get_connection() as connection:
+            records = connection.execute(query, tuple(parameters)).fetchall()
+
+        leaderboard = []
+        for index, record in enumerate(records, start=1):
+            try:
+                completed_quests = json.loads(record['completed_quests'] or '[]')
+            except (TypeError, ValueError, json.JSONDecodeError):
+                completed_quests = []
+
+            leaderboard.append({
+                'rank': index,
+                'uid': record['uid'],
+                'name': record['name'],
+                'email': record['email'],
+                'role': record['role'],
+                'xp': PSOAuthService.normalize_progression_xp(record['xp']),
+                'completed_quest_count': len(PSOAuthService.normalize_completed_quests(completed_quests)),
+                'last_updated_at': record['last_updated_at'],
+                'instrument': record['instrument'],
+                'section': record['section'],
+                'is_member': bool(record['is_member']),
+            })
+
+        return leaderboard
+
+    @staticmethod
     def save_progression(uid, body):
         PSOAuthService.ensure_database()
 

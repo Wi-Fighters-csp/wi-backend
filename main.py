@@ -183,6 +183,60 @@ def require_site_admin():
         return jsonify({'error': 'Unauthorized'}), 403
     return None
 
+
+def build_pso_admin_dashboard_context():
+    pso_actor = PSOAuthService.find_user_by_uid(current_user.uid)
+    if pso_actor is None or not pso_actor.is_admin():
+        shared_user = User.query.filter_by(_uid=current_user.uid).first()
+        if shared_user is not None and shared_user.is_admin():
+            synced_actor = PSOAuthService.sync_shared_user(shared_user)
+            if synced_actor is not None and synced_actor.is_admin():
+                pso_actor = synced_actor
+
+    users = PSOAuthService.list_users()
+    admins = PSOAuthService.list_admins()
+    pending_requests = PSOAuthService.list_member_requests(status='pending')
+    request_history = PSOAuthService.list_member_requests(status='all')
+    members = PSOAuthService.list_members()
+    member_cards = PSOAuthService.list_member_cards()
+    leaderboard = PSOAuthService.list_progression_leaderboard(limit=25)
+
+    request_counts = {
+        'total': len(request_history),
+        'pending': sum(1 for request_row in request_history if request_row.get('status') == 'pending'),
+        'approved': sum(1 for request_row in request_history if request_row.get('status') == 'approved'),
+        'rejected': sum(1 for request_row in request_history if request_row.get('status') == 'rejected'),
+    }
+
+    return {
+        'access': {
+            'uid': current_user.uid,
+            'name': current_user.name,
+            'email': current_user.email,
+            'role': current_user.role,
+            'is_admin': current_user.is_admin(),
+            'can_access_admin_dashboard': current_user.is_admin(),
+            'pso_role': pso_actor.role if pso_actor is not None else None,
+        },
+        'can_manage_pso': pso_actor is not None and pso_actor.is_admin(),
+        'users': users,
+        'admins': admins,
+        'pending_requests': pending_requests,
+        'request_history': request_history,
+        'members': members,
+        'member_cards': member_cards,
+        'leaderboard': leaderboard,
+        'request_counts': request_counts,
+        'dashboard_stats': {
+            'user_count': len(users),
+            'admin_count': len(admins),
+            'member_count': len(members),
+            'member_card_count': len(member_cards),
+            'pending_request_count': len(pending_requests),
+            'leaderboard_count': len(leaderboard),
+        },
+    }
+
 @app.route('/pso/users')
 @login_required
 def pso_users():
@@ -300,9 +354,67 @@ def delete_pso_member(uid):
 
 def require_pso_admin_actor():
     actor = PSOAuthService.find_user_by_uid(current_user.uid)
+    if actor is not None and actor.is_admin():
+        return actor, None
+
+    shared_user = User.query.filter_by(_uid=current_user.uid).first()
+    if shared_user is not None and shared_user.is_admin():
+        synced_actor = PSOAuthService.sync_shared_user(shared_user)
+        if synced_actor is not None and synced_actor.is_admin():
+            return synced_actor, None
+
     if actor is None or not actor.is_admin():
         return None, (jsonify({'error': 'Unauthorized'}), 403)
     return actor, None
+
+
+@app.route('/pso/admin')
+@login_required
+def pso_admin_dashboard():
+    if current_user.role != 'Admin':
+        return abort(403)
+
+    return render_template(
+        'pso_admin.html',
+        project='PSO Admin Dashboard',
+        **build_pso_admin_dashboard_context()
+    )
+
+
+@app.route('/pso/admin/member-requests/<int:request_id>/approve', methods=['POST'])
+@login_required
+def approve_pso_admin_member_request(request_id):
+    admin_error = require_site_admin()
+    if admin_error:
+        return admin_error
+
+    actor, actor_error = require_pso_admin_actor()
+    if actor_error:
+        return actor_error
+
+    approved_request, error_body, status_code = PSOAuthService.approve_member_request(request_id, actor)
+    if error_body:
+        return jsonify(error_body), status_code
+
+    return jsonify({'message': 'Request approved successfully.', 'request': approved_request}), status_code
+
+
+@app.route('/pso/admin/member-requests/<int:request_id>/reject', methods=['POST'])
+@login_required
+def reject_pso_admin_member_request(request_id):
+    admin_error = require_site_admin()
+    if admin_error:
+        return admin_error
+
+    actor, actor_error = require_pso_admin_actor()
+    if actor_error:
+        return actor_error
+
+    rejected_request, error_body, status_code = PSOAuthService.reject_member_request(request_id, actor)
+    if error_body:
+        return jsonify(error_body), status_code
+
+    return jsonify({'message': 'Request rejected successfully.', 'request': rejected_request}), status_code
 
 @app.route('/pso/member-cards/<int:card_id>', methods=['PUT'])
 @login_required

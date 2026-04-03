@@ -6,7 +6,12 @@ from model.pso import PSOAuthService
 
 
 pso_api = Blueprint('pso_api', __name__, url_prefix='/api')
-CORS(pso_api, supports_credentials=True)
+CORS(
+    pso_api,
+    supports_credentials=True,
+    methods=['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allow_headers=['Content-Type', 'X-Origin', 'Authorization'],
+)
 api = Api(pso_api)
 
 
@@ -252,6 +257,12 @@ class PSOAPI:
             return response
 
     class _MemberCardDetail(Resource):
+        def options(self, card_id):
+            response = jsonify({'message': 'OK'})
+            response.headers['Access-Control-Allow-Methods'] = 'GET, PATCH, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Origin, Authorization'
+            return response
+
         def get(self, card_id):
             card = PSOAuthService.get_member_card_by_id(card_id)
             if card is None:
@@ -280,6 +291,9 @@ class PSOAPI:
             })
             response.status_code = status_code
             return response
+
+        def put(self, card_id):
+            return self.patch(card_id)
 
         def delete(self, card_id):
             current_user, error_body, status_code = PSOAuthService.authenticate_request()

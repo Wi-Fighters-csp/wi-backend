@@ -27,7 +27,7 @@ login_manager.init_app(app)
 
 
 # Allowed servers for cross-origin resource sharing (CORS)
-# Static allowed origins for local development
+# Static allowed origins for local development and deployed frontends
 allowed_origins = [
     'http://localhost:4500',
     'http://127.0.0.1:4500',
@@ -38,27 +38,27 @@ allowed_origins = [
     'http://localhost:4000',
     'http://127.0.0.1:4000',
     'https://open-coding-society.github.io',
+   'https://pages.opencodingsociety.com',
+   'https://wifighters.opencodingsociety.com',
+   'http://wifighters.opencodingsociety.com',
+   'https://pso.opencodingsociety.com',
+   'http://pso.opencodingsociety.com',
+   'https://opencodingsociety.com',
     # Regex pattern to match any subdomain of opencodingsociety.com
     r'https://.*\.opencodingsociety\.com',
-    'https://opencodingsociety.com',
 ]
 
 cors = CORS(
    app,
    supports_credentials=True,
-   origins=[
-       'http://localhost:4500',
-       'http://127.0.0.1:4500',
-       'http://localhost:4599',
-       'http://127.0.0.1:4599',
-       'http://localhost:4600',
-       'http://127.0.0.1:4600',
-       'http://localhost:4000',
-       'http://127.0.0.1:4000',
-       'https://open-coding-society.github.io',
-       'https://pages.opencodingsociety.com',
-   ],
-      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+   resources={
+      r"/api/*": {
+         "origins": allowed_origins,
+         "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+         "allow_headers": ["Content-Type", "X-Origin", "Authorization"],
+         "supports_credentials": True,
+      }
+   }
 )
 
 

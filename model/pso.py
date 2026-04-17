@@ -1539,6 +1539,76 @@ class PSOAuthService:
             return False, {'message': 'Member profile not found'}, 404
 
         return True, None, None
-
+    @staticmethod
+    def get_concert_recommendations(uid, favorite_performances):
+        """
+        Match favorite performances against upcoming concerts.
+        Returns recommended concerts with match reasons.
+        """
+        all_concerts = [
+            {
+                'id': 1,
+                'title': 'Spring Gala Overture Night',
+                'date': 'Apr 18, 2026',
+                'composers': ['Mozart', 'Beethoven'],
+                'genres': ['Classical', 'Overture'],
+                'note': 'Featured evening at the Poway Center with celebratory repertoire.'
+            },
+            {
+                'id': 2,
+                'title': 'Community Showcase Concert',
+                'date': 'May 30, 2026',
+                'composers': ['Various'],
+                'genres': ['Mixed Repertoire'],
+                'note': 'A broad-access performance ideal for friends and family.'
+            }
+        ]
+        
+        recommendations = []
+        
+        for concert in all_concerts:
+            match_score = 0
+            match_reasons = []
+            
+            for favorite in favorite_performances:
+                favorite_lower = favorite.lower()
+                
+                # Check for composer matches
+                for composer in concert.get('composers', []):
+                    if composer.lower() in favorite_lower or favorite_lower in composer.lower():
+                        match_score += 2
+                        match_reasons.append(f"Features {composer}")
+                
+                # Check for genre matches
+                for genre in concert.get('genres', []):
+                    if genre.lower() in favorite_lower or favorite_lower in genre.lower():
+                        match_score += 1
+                        match_reasons.append(f"Similar {genre} style")
+                
+                # Keyword matching
+                keywords = ['overture', 'classical', 'symphony', 'concerto', 'sonata']
+                for keyword in keywords:
+                    if keyword in favorite_lower and keyword in concert['title'].lower():
+                        match_score += 1
+                        match_reasons.append(f"Includes {keyword}")
+            
+            if match_score > 0:
+                recommendations.append({
+                    'id': concert['id'],
+                    'title': concert['title'],
+                    'date': concert['date'],
+                    'note': concert['note'],
+                    'reason': match_reasons[0] if match_reasons else 'Matches your preferences',
+                    'match_score': match_score
+                })
+        
+        # Sort by match score and limit results
+        recommendations.sort(key=lambda x: x['match_score'], reverse=True)
+        
+        # Remove match_score from response (internal use only)
+        for rec in recommendations:
+            del rec['match_score']
+        
+        return recommendations[:5]  # Return top 5 recommendations
 
 PSOAuthService.ensure_database()

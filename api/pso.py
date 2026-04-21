@@ -277,7 +277,7 @@ class PSOAPI:
             if error_body:
                 return error_body, status_code
 
-            card, error_body, status_code = PSOAuthService.update_member_card(
+            updated_card, error_body, status_code = PSOAuthService.update_member_card(
                 card_id,
                 current_user,
                 request.get_json() or {}
@@ -285,12 +285,10 @@ class PSOAPI:
             if error_body:
                 return error_body, status_code
 
-            response = jsonify({
+            return jsonify({
                 'message': 'Member card updated.',
-                'card': card
+                'card': updated_card
             })
-            response.status_code = status_code
-            return response
 
         def put(self, card_id):
             return self.patch(card_id)
@@ -301,14 +299,10 @@ class PSOAPI:
                 return error_body, status_code
 
             deleted, error_body, status_code = PSOAuthService.delete_member_card(card_id, current_user)
-            if error_body:
+            if not deleted:
                 return error_body, status_code
 
-            response = jsonify({
-                'message': 'Member card deleted successfully.'
-            })
-            response.status_code = status_code
-            return response
+            return jsonify({'message': 'Member card deleted.'})
 
     class _AdminMemberRequests(Resource, _AdminMixin):
         def get(self):
@@ -398,6 +392,63 @@ class PSOAPI:
                 'role': current_user.role
             })
 
+    # NEW: user/admin shared chat endpoints
+    class _MembershipChatThread(Resource):
+        def get(self):
+            current_user, error_body, status_code = PSOAuthService.authenticate_request()
+            if error_body:
+                return error_body, status_code
+
+            thread_uid = request.args.get('thread_uid') or request.args.get('uid')
+            thread, error_body, status_code = PSOAuthService.get_chat_thread_for_user(current_user, thread_uid=thread_uid)
+            if error_body:
+                return error_body, status_code
+
+            return jsonify(thread)
+
+    class _MembershipChatMessages(Resource):
+        def post(self):
+            current_user, error_body, status_code = PSOAuthService.authenticate_request()
+            if error_body:
+                return error_body, status_code
+
+            body = request.get_json() or {}
+            thread_uid = body.get('thread_uid') or current_user.uid
+
+            # non-admin users can only send to their own thread
+            if not current_user.is_admin() and str(thread_uid) != str(current_user.uid):
+                return {'message': 'Forbidden'}, 403
+
+            message, error_body, status_code = PSOAuthService.send_chat_message(
+                thread_uid=thread_uid,
+                sender_user=current_user,
+                text=body.get('text')
+            )
+            if error_body:
+                return error_body, status_code
+
+            response = jsonify({
+                'message': 'Chat message sent.',
+                'chat_message': message
+            })
+            response.status_code = status_code
+            return response
+
+    class _AdminChatThreads(Resource, _AdminMixin):
+        def get(self):
+            current_user, error_body, status_code = PSOAuthService.authenticate_request()
+            if error_body:
+                return error_body, status_code
+
+            admin_error, admin_status = self.require_admin(current_user)
+            if admin_error:
+                return admin_error, admin_status
+
+            return jsonify({
+                'threads': PSOAuthService.list_chat_threads_for_admin()
+            })
+
+
 api.add_resource(PSOAPI._Signup, '/pso/signup')
 api.add_resource(PSOAPI._Authenticate, '/authenticate')
 api.add_resource(PSOAPI._Identity, '/id')
@@ -414,3 +465,8 @@ api.add_resource(PSOAPI._AdminApproveMemberRequest, '/pso/admin/member-requests/
 api.add_resource(PSOAPI._AdminRejectMemberRequest, '/pso/admin/member-requests/<int:request_id>/reject')
 api.add_resource(PSOAPI._AdminMembers, '/pso/admin/members')
 api.add_resource(PSOAPI._AdminAccess, '/pso/admin/access')
+
+# NEW
+api.add_resource(PSOAPI._MembershipChatThread, '/pso/chat/thread')
+api.add_resource(PSOAPI._MembershipChatMessages, '/pso/chat/messages')
+api.add_resource(PSOAPI._AdminChatThreads, '/pso/admin/chat/threads')

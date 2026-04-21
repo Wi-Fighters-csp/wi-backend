@@ -208,6 +208,7 @@ class PSOAuthService:
             connection.execute(
                 'CREATE UNIQUE INDEX IF NOT EXISTS idx_pso_users_email ON users(email)'
             )
+
             connection.execute(
                 '''
                 CREATE TABLE IF NOT EXISTS orchestra_members (
@@ -257,6 +258,7 @@ class PSOAuthService:
                 )
                 '''
             )
+
             connection.execute(
                 '''
                 CREATE TABLE IF NOT EXISTS member_cards (
@@ -301,6 +303,7 @@ class PSOAuthService:
             connection.execute(
                 'CREATE UNIQUE INDEX IF NOT EXISTS idx_member_cards_owner_section_unique ON member_cards(owner_uid, family, section_id)'
             )
+
             connection.execute(
                 '''
                 CREATE TABLE IF NOT EXISTS user_progression (
@@ -313,6 +316,26 @@ class PSOAuthService:
                 )
                 '''
             )
+
+            # NEW: shared chat table for all devices/computers
+            connection.execute(
+                '''
+                CREATE TABLE IF NOT EXISTS membership_chat_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    thread_uid TEXT NOT NULL,
+                    sender_uid TEXT NOT NULL,
+                    sender_name TEXT NOT NULL,
+                    sender_role TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (thread_uid) REFERENCES users(uid) ON DELETE CASCADE
+                )
+                '''
+            )
+            connection.execute(
+                'CREATE INDEX IF NOT EXISTS idx_membership_chat_thread_uid ON membership_chat_messages(thread_uid)'
+            )
+
             connection.commit()
 
         PSOAuthService.seed_default_user()
@@ -663,146 +686,31 @@ class PSOAuthService:
                 )
                 return synced_user, None, None
 
-            current_app.logger.warning(
-                'PSO auth shared user sync failed identifier=%s shared_uid=%s',
-                normalized_identifier,
-                shared_user.uid,
-            )
-
-        if user is not None:
-            current_app.logger.warning('PSO auth failed: local password mismatch identifier=%s uid=%s', normalized_identifier, user.uid)
-        elif shared_user is not None:
-            current_app.logger.warning('PSO auth failed: shared password mismatch identifier=%s uid=%s', normalized_identifier, shared_user.uid)
-        else:
-            current_app.logger.warning('PSO auth failed: no local or shared user for identifier=%s', normalized_identifier)
-
         return None, {
             'message': 'Invalid Poway Orchestra user ID or password. If you have not created a Poway account yet, sign up first.'
         }, 401
 
     @staticmethod
-    def authenticate_request():
-        PSOAuthService.ensure_database()
-
-        token = request.cookies.get(current_app.config['JWT_TOKEN_NAME'])
-        if not token:
-            return None, {
-                'message': 'Authentication required. No token found.',
-                'data': None,
-                'error': 'Unauthorized'
-            }, 401
-
-        try:
-            data = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
-        except jwt.ExpiredSignatureError:
-            return None, {
-                'message': 'Token has expired!',
-                'data': None,
-                'error': 'Unauthorized'
-            }, 401
-        except jwt.InvalidTokenError:
-            return None, {
-                'message': 'Invalid token!',
-                'data': None,
-                'error': 'Unauthorized'
-            }, 401
-
-        user = PSOAuthService.find_user_by_uid(data.get('_uid'))
-        if user is None:
-            current_app.logger.info('PSO token fallback to shared user for uid=%s', data.get('_uid'))
-            shared_user = User.query.filter_by(_uid=data.get('_uid')).first()
-            if shared_user is None:
-                current_app.logger.warning('PSO token auth failed: uid not found locally or shared uid=%s', data.get('_uid'))
-                return None, {
-                    'message': 'Invalid Authentication token!',
-                    'data': None,
-                    'error': 'Unauthorized'
-                }, 401
-
-            user = PSOAuthService.sync_shared_user(shared_user)
-            if user is None:
-                current_app.logger.warning('PSO token auth failed: shared user sync failed uid=%s', data.get('_uid'))
-                return None, {
-                    'message': 'Invalid Authentication token!',
-                    'data': None,
-                    'error': 'Unauthorized'
-                }, 401
-
-        return user, None, None
-
-    @staticmethod
-    def current_user_payload(user):
-        payload = user.read()
-        payload['is_member'] = PSOAuthService.is_member(user.uid)
-        payload['member_request_status'] = PSOAuthService.get_member_request_status(user.uid)
-        payload['is_admin'] = user.is_admin()
-        payload['is_teacher'] = user.is_teacher()
-        payload['can_access_admin_dashboard'] = user.is_admin()
-        return payload
-
-    @staticmethod
-    def login_payload(user):
-        return {
-            'message': f'Authentication for {user.uid} successful',
-            'user': {
-                'uid': user.uid,
-                'name': user.name,
-                'email': user.email,
-                'role': user.role,
-                'is_member': PSOAuthService.is_member(user.uid),
-                'member_request_status': PSOAuthService.get_member_request_status(user.uid),
-                'can_access_admin_dashboard': user.is_admin()
-            }
-        }
-
-    @staticmethod
-    def signup_payload(user):
-        return {
-            'message': f'User {user.uid} created successfully',
-            'user': {
-                'id': user.id,
-                'uid': user.uid,
-                'name': user.name,
-                'email': user.email,
-                'role': user.role,
-                'is_member': False,
-                'member_request_status': 'none',
-                'can_access_admin_dashboard': user.is_admin()
-            }
-        }
-
-    @staticmethod
-    def logout_payload(user):
-        return {
-            'message': 'Logout successful',
-            'user': {
-                'uid': user.uid,
-                'name': user.name
-            }
-        }
-
-    @staticmethod
     def issue_token(user):
-        return jwt.encode(
-            {'_uid': user.uid},
-            current_app.config['SECRET_KEY'],
-            algorithm='HS256'
-        )
+        payload = {
+            'uid': user.uid,
+            'role': user.role,
+            'exp': datetime.now(timezone.utc).timestamp() + 60 * 60 * 24 * 7
+        }
+        return jwt.encode(payload, current_app.config['SECRET_KEY'], algorithm='HS256')
 
     @staticmethod
     def cookie_options(expired=False):
-        is_production = os.environ.get('IS_PRODUCTION', 'false').lower() == 'true'
         options = {
-            'max_age': 0 if expired else 43200,
-            'secure': is_production,
             'httponly': True,
+            'secure': False,
+            'samesite': 'Lax',
             'path': '/',
-            'samesite': 'None' if is_production else 'Lax'
         }
-
-        if is_production:
-            options['domain'] = '.opencodingsociety.com'
-
+        if expired:
+            options['expires'] = 0
+        else:
+            options['max_age'] = 60 * 60 * 24 * 7
         return options
 
     @staticmethod
@@ -822,6 +730,76 @@ class PSOAuthService:
             **PSOAuthService.cookie_options(expired=True)
         )
         return response
+
+    @staticmethod
+    def authenticate_request():
+        PSOAuthService.ensure_database()
+
+        token = request.cookies.get(current_app.config['JWT_TOKEN_NAME'])
+        if not token:
+            return None, {
+                'message': 'Authentication required. No token found.',
+                'data': None,
+                'error': 'Unauthorized'
+            }, 401
+
+        try:
+            payload = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
+        except Exception:
+            return None, {
+                'message': 'Authentication required. Invalid token.',
+                'data': None,
+                'error': 'Unauthorized'
+            }, 401
+
+        user = PSOAuthService.find_user_by_uid(payload.get('uid'))
+        if user is None:
+            return None, {
+                'message': 'Authentication required. User not found.',
+                'data': None,
+                'error': 'Unauthorized'
+            }, 401
+
+        return user, None, None
+
+    @staticmethod
+    def signup_payload(user):
+        return {
+            'message': 'Signup successful',
+            'uid': user.uid,
+            'name': user.name,
+            'email': user.email,
+            'role': user.role,
+            'is_admin': user.is_admin()
+        }
+
+    @staticmethod
+    def login_payload(user):
+        return {
+            'message': 'Login successful',
+            'uid': user.uid,
+            'name': user.name,
+            'email': user.email,
+            'role': user.role,
+            'is_admin': user.is_admin()
+        }
+
+    @staticmethod
+    def logout_payload(user):
+        return {
+            'message': 'Logout successful',
+            'uid': user.uid
+        }
+
+    @staticmethod
+    def current_user_payload(user):
+        return {
+            'uid': user.uid,
+            'name': user.name,
+            'email': user.email,
+            'role': user.role,
+            'is_admin': user.is_admin()
+        }
 
     @staticmethod
     def get_member_by_uid(uid):
@@ -917,340 +895,6 @@ class PSOAuthService:
         }
 
     @staticmethod
-    def get_progression(uid):
-        PSOAuthService.ensure_database()
-        with PSOAuthService.get_connection() as connection:
-            record = connection.execute(
-                '''
-                SELECT uid, xp, completed_quests, metrics, last_updated_at
-                FROM user_progression
-                WHERE uid = ?
-                ''',
-                (uid,)
-            ).fetchone()
-
-        return PSOAuthService.progression_payload(record)
-
-    @staticmethod
-    def list_progression_leaderboard(limit=None):
-        PSOAuthService.ensure_database()
-        query = (
-            '''
-            SELECT u.uid, u.name, u.email, u.role,
-                   COALESCE(up.xp, 0) AS xp,
-                   COALESCE(up.completed_quests, '[]') AS completed_quests,
-                   up.last_updated_at,
-                   om.instrument,
-                   om.section,
-                   CASE WHEN om.uid IS NOT NULL THEN 1 ELSE 0 END AS is_member
-            FROM users u
-            LEFT JOIN user_progression up ON up.uid = u.uid
-            LEFT JOIN orchestra_members om ON om.uid = u.uid
-            ORDER BY COALESCE(up.xp, 0) DESC,
-                     u.name COLLATE NOCASE ASC,
-                     u.uid COLLATE NOCASE ASC
-            '''
-        )
-        parameters = []
-
-        if isinstance(limit, int) and limit > 0:
-            query += ' LIMIT ?'
-            parameters.append(limit)
-
-        with PSOAuthService.get_connection() as connection:
-            records = connection.execute(query, tuple(parameters)).fetchall()
-
-        leaderboard = []
-        for index, record in enumerate(records, start=1):
-            try:
-                completed_quests = json.loads(record['completed_quests'] or '[]')
-            except (TypeError, ValueError, json.JSONDecodeError):
-                completed_quests = []
-
-            leaderboard.append({
-                'rank': index,
-                'uid': record['uid'],
-                'name': record['name'],
-                'email': record['email'],
-                'role': record['role'],
-                'xp': PSOAuthService.normalize_progression_xp(record['xp']),
-                'completed_quest_count': len(PSOAuthService.normalize_completed_quests(completed_quests)),
-                'last_updated_at': record['last_updated_at'],
-                'instrument': record['instrument'],
-                'section': record['section'],
-                'is_member': bool(record['is_member']),
-            })
-
-        return leaderboard
-
-    @staticmethod
-    def save_progression(uid, body):
-        PSOAuthService.ensure_database()
-
-        existing_progression = PSOAuthService.get_progression(uid)
-        updated_progression = PSOAuthService.merge_progression(existing_progression, body or {})
-
-        with PSOAuthService.get_connection() as connection:
-            connection.execute(
-                '''
-                INSERT INTO user_progression (uid, xp, completed_quests, metrics, last_updated_at)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(uid) DO UPDATE SET
-                    xp = excluded.xp,
-                    completed_quests = excluded.completed_quests,
-                    metrics = excluded.metrics,
-                    last_updated_at = excluded.last_updated_at
-                ''',
-                (
-                    uid,
-                    updated_progression['xp'],
-                    json.dumps(updated_progression['completedQuests']),
-                    json.dumps(updated_progression['metrics']),
-                    updated_progression['lastUpdatedAt'],
-                )
-            )
-            connection.commit()
-
-        return updated_progression
-
-    @staticmethod
-    def member_card_payload(record):
-        if record is None:
-            return None
-
-        return {
-            'id': record['id'],
-            'owner_uid': record['owner_uid'],
-            'owner_name': record['owner_name'],
-            'family': record['family'],
-            'section_id': record['section_id'],
-            'instrument_title': record['instrument_title'],
-            'image_url': record['image_url'],
-            'bio': record['bio'],
-            'created_by_uid': record['created_by_uid'],
-            'created_at': record['created_at'],
-            'updated_at': record['updated_at'],
-        }
-
-    @staticmethod
-    def get_member_card_by_id(card_id):
-        PSOAuthService.ensure_database()
-        with PSOAuthService.get_connection() as connection:
-            record = connection.execute(
-                '''
-                SELECT id, owner_uid, owner_name, family, section_id, instrument_title,
-                       image_url, bio, created_by_uid, created_at, updated_at
-                FROM member_cards
-                WHERE id = ?
-                ''',
-                (card_id,)
-            ).fetchone()
-
-        return PSOAuthService.member_card_payload(record)
-
-    @staticmethod
-    def list_member_cards(current_user=None, family=None, section_id=None):
-        PSOAuthService.ensure_database()
-        query = (
-            'SELECT id, owner_uid, owner_name, family, section_id, instrument_title, '
-            'image_url, bio, created_by_uid, created_at, updated_at '
-            'FROM member_cards WHERE 1 = 1 '
-        )
-        parameters = []
-
-        normalized_family = PSOAuthService.normalize_member_card_text(family)
-        normalized_section = PSOAuthService.normalize_member_card_text(section_id)
-
-        if normalized_family:
-            query += 'AND family = ? '
-            parameters.append(normalized_family)
-        if normalized_section:
-            query += 'AND section_id = ? '
-            parameters.append(normalized_section)
-
-        query += 'ORDER BY family COLLATE NOCASE ASC, section_id COLLATE NOCASE ASC, owner_name COLLATE NOCASE ASC, id ASC'
-
-        with PSOAuthService.get_connection() as connection:
-            records = connection.execute(query, tuple(parameters)).fetchall()
-
-        return [PSOAuthService.member_card_payload(record) for record in records]
-
-    @staticmethod
-    def validate_member_card_owner(owner_uid):
-        normalized_owner_uid = PSOAuthService.normalize_member_card_text(owner_uid)
-        if len(normalized_owner_uid) < 2:
-            return None, {'message': 'owner_uid is required'}, 400
-
-        owner_user = PSOAuthService.find_user_by_uid(normalized_owner_uid)
-        if owner_user is None:
-            return None, {'message': 'Owner user not found'}, 404
-
-        if not PSOAuthService.is_member(normalized_owner_uid):
-            return None, {'message': 'Owner must be a registered member'}, 409
-
-        return owner_user, None, None
-
-    @staticmethod
-    def find_member_card(owner_uid, family, section_id, exclude_id=None):
-        PSOAuthService.ensure_database()
-        query = (
-            'SELECT id, owner_uid, owner_name, family, section_id, instrument_title, '
-            'image_url, bio, created_by_uid, created_at, updated_at '
-            'FROM member_cards WHERE owner_uid = ? AND family = ? AND section_id = ?'
-        )
-        parameters = [owner_uid, family, section_id]
-
-        if exclude_id is not None:
-            query += ' AND id != ?'
-            parameters.append(exclude_id)
-
-        with PSOAuthService.get_connection() as connection:
-            record = connection.execute(query, tuple(parameters)).fetchone()
-
-        return PSOAuthService.member_card_payload(record)
-
-    @staticmethod
-    def create_member_card(current_user, body):
-        owner_uid = body.get('owner_uid') or body.get('ownerUid')
-        owner_user, error_body, status_code = PSOAuthService.validate_member_card_owner(owner_uid)
-        if error_body:
-            return None, error_body, status_code
-
-        family = PSOAuthService.normalize_member_card_text(body.get('family'))
-        section_id = PSOAuthService.normalize_member_card_text(body.get('section_id') or body.get('sectionId'))
-        owner_name = PSOAuthService.normalize_member_card_text(body.get('owner_name') or body.get('ownerName'), owner_user.name)
-        instrument_title = PSOAuthService.normalize_member_card_text(body.get('instrument_title') or body.get('instrumentTitle'))
-        image_url = PSOAuthService.normalize_member_card_text(body.get('image_url') or body.get('imageUrl'))
-        bio = PSOAuthService.normalize_member_card_text(body.get('bio'))
-
-        if not family:
-            return None, {'message': 'family is required'}, 400
-        if not section_id:
-            return None, {'message': 'section_id is required'}, 400
-        if not owner_name:
-            return None, {'message': 'owner_name is required'}, 400
-        if not instrument_title:
-            return None, {'message': 'instrument_title is required'}, 400
-        if PSOAuthService.find_member_card(owner_user.uid, family, section_id) is not None:
-            return None, {'message': 'Member card already exists for this owner and section'}, 409
-
-        with PSOAuthService.get_connection() as connection:
-            cursor = connection.execute(
-                '''
-                INSERT INTO member_cards (
-                    owner_uid, owner_name, family, section_id, instrument_title,
-                    image_url, bio, created_by_uid
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''',
-                (
-                    owner_user.uid,
-                    owner_name,
-                    family,
-                    section_id,
-                    instrument_title,
-                    image_url,
-                    bio,
-                    current_user.uid,
-                )
-            )
-            connection.commit()
-
-        return PSOAuthService.get_member_card_by_id(cursor.lastrowid), None, 201
-
-    @staticmethod
-    def update_member_card(card_id, current_user, body):
-        card = PSOAuthService.get_member_card_by_id(card_id)
-        if card is None:
-            return None, {'message': 'Member card not found'}, 404
-
-        is_admin = current_user.is_admin()
-        if not is_admin and card['owner_uid'] != current_user.uid:
-            return None, {'message': 'Forbidden'}, 403
-
-        updates = {}
-
-        def update_if_present(target_key, *source_keys):
-            for source_key in source_keys:
-                if source_key in body:
-                    updates[target_key] = body.get(source_key)
-                    return
-
-        update_if_present('owner_name', 'owner_name', 'ownerName')
-        update_if_present('instrument_title', 'instrument_title', 'instrumentTitle')
-        update_if_present('image_url', 'image_url', 'imageUrl')
-        update_if_present('bio', 'bio')
-
-        if is_admin:
-            update_if_present('owner_uid', 'owner_uid', 'ownerUid')
-            update_if_present('family', 'family')
-            update_if_present('section_id', 'section_id', 'sectionId')
-
-        if not updates:
-            return card, None, 200
-
-        normalized_updates = {}
-        for key, value in updates.items():
-            normalized_updates[key] = PSOAuthService.normalize_member_card_text(value)
-
-        if 'owner_uid' in normalized_updates:
-            owner_user, error_body, status_code = PSOAuthService.validate_member_card_owner(normalized_updates['owner_uid'])
-            if error_body:
-                return None, error_body, status_code
-            normalized_updates['owner_uid'] = owner_user.uid
-            if not normalized_updates.get('owner_name'):
-                normalized_updates['owner_name'] = owner_user.name
-
-        if 'owner_name' in normalized_updates and not normalized_updates['owner_name']:
-            return None, {'message': 'owner_name is required'}, 400
-        if is_admin and 'family' in normalized_updates and not normalized_updates['family']:
-            return None, {'message': 'family is required'}, 400
-        if is_admin and 'section_id' in normalized_updates and not normalized_updates['section_id']:
-            return None, {'message': 'section_id is required'}, 400
-        if 'instrument_title' in normalized_updates and not normalized_updates['instrument_title']:
-            return None, {'message': 'instrument_title is required'}, 400
-
-        next_owner_uid = normalized_updates.get('owner_uid', card['owner_uid'])
-        next_family = normalized_updates.get('family', card['family'])
-        next_section_id = normalized_updates.get('section_id', card['section_id'])
-        if PSOAuthService.find_member_card(next_owner_uid, next_family, next_section_id, exclude_id=card_id) is not None:
-            return None, {'message': 'Member card already exists for this owner and section'}, 409
-
-        assignments = []
-        parameters = []
-        for key in ('owner_uid', 'owner_name', 'family', 'section_id', 'instrument_title', 'image_url', 'bio'):
-            if key in normalized_updates:
-                assignments.append(f'{key} = ?')
-                parameters.append(normalized_updates[key])
-
-        assignments.append('updated_at = CURRENT_TIMESTAMP')
-        parameters.append(card_id)
-
-        with PSOAuthService.get_connection() as connection:
-            connection.execute(
-                f"UPDATE member_cards SET {', '.join(assignments)} WHERE id = ?",
-                tuple(parameters)
-            )
-            connection.commit()
-
-        return PSOAuthService.get_member_card_by_id(card_id), None, 200
-
-    @staticmethod
-    def delete_member_card(card_id, current_user):
-        card = PSOAuthService.get_member_card_by_id(card_id)
-        if card is None:
-            return False, {'message': 'Member card not found'}, 404
-
-        if not current_user.is_admin() and card['owner_uid'] != current_user.uid:
-            return False, {'message': 'Forbidden'}, 403
-
-        with PSOAuthService.get_connection() as connection:
-            connection.execute('DELETE FROM member_cards WHERE id = ?', (card_id,))
-            connection.commit()
-
-        return True, None, 200
-
-    @staticmethod
     def submit_member_request(uid, name, email, instrument, section):
         if email is None or len(str(email).strip()) < 3 or '@' not in str(email):
             return None, {'message': 'Email is missing or invalid'}, 400
@@ -1267,6 +911,10 @@ class PSOAuthService:
         user = PSOAuthService.find_user_by_uid(uid)
         if user is None:
             return None, {'message': 'User not found'}, 404
+
+        # NEW: admins should not request membership
+        if user.is_admin():
+            return None, {'message': 'Admins already have orchestra access and cannot submit a membership request.'}, 409
 
         if PSOAuthService.is_member(uid):
             return None, {'message': 'User is already registered as a member'}, 409
@@ -1422,122 +1070,153 @@ class PSOAuthService:
 
         return [dict(record) for record in records]
 
+    # ------------------------------
+    # NEW CHAT HELPERS
+    # ------------------------------
+
     @staticmethod
-    def update_member(uid, body):
-        member = PSOAuthService.get_member_by_uid(uid)
-        if member is None:
-            return None, {'message': 'PSO member not found'}, 404
+    def serialize_chat_message(record):
+        return {
+            'id': record['id'],
+            'thread_uid': record['thread_uid'],
+            'sender_uid': record['sender_uid'],
+            'sender_name': record['sender_name'],
+            'sender_role': record['sender_role'],
+            'text': record['text'],
+            'created_at': record['created_at'],
+        }
 
-        updates = {}
-
-        if 'name' in body:
-            name = str(body.get('name') or '').strip()
-            if len(name) < 2:
-                return None, {'message': 'name must be at least 2 characters'}, 400
-            updates['name'] = name
-
-        if 'email' in body:
-            email = str(body.get('email') or '').strip().lower()
-            if len(email) < 3 or '@' not in email:
-                return None, {'message': 'email is invalid'}, 400
-            updates['email'] = email
-
-        if 'instrument' in body:
-            instrument = str(body.get('instrument') or '').strip()
-            if not instrument:
-                return None, {'message': 'instrument is required'}, 400
-            updates['instrument'] = instrument
-
-        if 'section' in body:
-            section = str(body.get('section') or '').strip()
-            if not section:
-                return None, {'message': 'section is required'}, 400
-            updates['section'] = section
-
-        if 'practice_time' in body:
-            practice_time = PSOAuthService.normalize_practice_time(body.get('practice_time'))
-            if practice_time is None:
-                return None, {'message': 'practice_time must be a non-negative integer'}, 400
-            updates['practice_time'] = practice_time
-
-        if not updates:
-            return member, None, 200
-
-        assignments = []
-        parameters = []
-        for key in ('name', 'email', 'instrument', 'section', 'practice_time'):
-            if key in updates:
-                assignments.append(f'{key} = ?')
-                parameters.append(updates[key])
-
-        parameters.append(uid)
-
+    @staticmethod
+    def list_chat_messages(thread_uid):
+        PSOAuthService.ensure_database()
         with PSOAuthService.get_connection() as connection:
-            connection.execute(
-                f"UPDATE orchestra_members SET {', '.join(assignments)} WHERE uid = ?",
-                tuple(parameters)
-            )
-            if 'name' in updates or 'email' in updates:
-                user_assignments = []
-                user_parameters = []
-                if 'name' in updates:
-                    user_assignments.append('name = ?')
-                    user_parameters.append(updates['name'])
-                if 'email' in updates:
-                    user_assignments.append('email = ?')
-                    user_parameters.append(updates['email'])
-                user_parameters.append(uid)
-                connection.execute(
-                    f"UPDATE users SET {', '.join(user_assignments)} WHERE uid = ?",
-                    tuple(user_parameters)
-                )
-            connection.commit()
+            records = connection.execute(
+                '''
+                SELECT id, thread_uid, sender_uid, sender_name, sender_role, text, created_at
+                FROM membership_chat_messages
+                WHERE thread_uid = ?
+                ORDER BY id ASC
+                ''',
+                (thread_uid,)
+            ).fetchall()
 
-        return PSOAuthService.get_member_by_uid(uid), None, 200
+        return [PSOAuthService.serialize_chat_message(record) for record in records]
 
     @staticmethod
-    def delete_member(uid):
-        member = PSOAuthService.get_member_by_uid(uid)
-        if member is None:
-            return False, {'message': 'PSO member not found'}, 404
+    def send_chat_message(thread_uid, sender_user, text):
+        PSOAuthService.ensure_database()
 
-        with PSOAuthService.get_connection() as connection:
-            connection.execute('DELETE FROM orchestra_members WHERE uid = ?', (uid,))
-            connection.commit()
+        normalized_thread_uid = str(thread_uid or '').strip()
+        normalized_text = str(text or '').strip()
+        if not normalized_thread_uid:
+            return None, {'message': 'thread_uid is required'}, 400
+        if not normalized_text:
+            return None, {'message': 'Message text is required'}, 400
 
-        return True, None, 200
-
-    @staticmethod
-    def update_member_profile(uid, instrument, section, practice_time):
-        if instrument is None or len(str(instrument).strip()) == 0:
-            return False, {'message': 'Instrument is required'}, 400
-
-        if section is None or len(str(section).strip()) == 0:
-            return False, {'message': 'Section is required'}, 400
-
-        normalized_practice_time = PSOAuthService.normalize_practice_time(practice_time)
-        if normalized_practice_time is None:
-            return False, {'message': 'Practice time must be a non-negative integer'}, 400
+        recipient = PSOAuthService.find_user_by_uid(normalized_thread_uid)
+        if recipient is None:
+            return None, {'message': 'Chat recipient not found'}, 404
 
         with PSOAuthService.get_connection() as connection:
             cursor = connection.execute(
                 '''
-                UPDATE orchestra_members
-                SET instrument = ?, section = ?, practice_time = ?
-                WHERE uid = ?
+                INSERT INTO membership_chat_messages (thread_uid, sender_uid, sender_name, sender_role, text)
+                VALUES (?, ?, ?, ?, ?)
                 ''',
                 (
-                    str(instrument).strip(),
-                    str(section).strip(),
-                    normalized_practice_time,
-                    uid,
+                    normalized_thread_uid,
+                    sender_user.uid,
+                    sender_user.name,
+                    str(sender_user.role or 'user').lower(),
+                    normalized_text,
                 )
             )
             connection.commit()
 
-        if cursor.rowcount == 0:
-            return False, {'message': 'Member profile not found'}, 404
+            record = connection.execute(
+                '''
+                SELECT id, thread_uid, sender_uid, sender_name, sender_role, text, created_at
+                FROM membership_chat_messages
+                WHERE id = ?
+                ''',
+                (cursor.lastrowid,)
+            ).fetchone()
 
-        return True, None, None
+        return PSOAuthService.serialize_chat_message(record), None, 201
 
-PSOAuthService.ensure_database()
+    @staticmethod
+    def get_chat_thread_for_user(current_user, thread_uid=None):
+        target_uid = str(thread_uid or current_user.uid).strip()
+        if not current_user.is_admin() and target_uid != current_user.uid:
+            return None, {'message': 'Forbidden'}, 403
+
+        target_user = PSOAuthService.find_user_by_uid(target_uid)
+        if target_user is None:
+            return None, {'message': 'User not found'}, 404
+
+        target_request = PSOAuthService.get_latest_member_request(target_uid)
+        target_member = PSOAuthService.get_member_by_uid(target_uid)
+
+        return {
+            'uid': target_uid,
+            'name': target_user.name,
+            'email': target_user.email,
+            'role': target_user.role,
+            'request': target_request,
+            'member': target_member,
+            'messages': PSOAuthService.list_chat_messages(target_uid)
+        }, None, 200
+
+    @staticmethod
+    def list_chat_threads_for_admin():
+        PSOAuthService.ensure_database()
+
+        with PSOAuthService.get_connection() as connection:
+            records = connection.execute(
+                '''
+                SELECT DISTINCT
+                    u.uid,
+                    u.name,
+                    u.email,
+                    u.role,
+                    mr.status AS request_status,
+                    mr.instrument AS request_instrument,
+                    mr.section AS request_section,
+                    last_msg.text AS latest_text,
+                    last_msg.created_at AS latest_created_at
+                FROM users u
+                JOIN membership_chat_messages m ON m.thread_uid = u.uid
+                LEFT JOIN member_requests mr
+                    ON mr.id = (
+                        SELECT mr2.id
+                        FROM member_requests mr2
+                        WHERE mr2.uid = u.uid
+                        ORDER BY mr2.id DESC
+                        LIMIT 1
+                    )
+                LEFT JOIN membership_chat_messages last_msg
+                    ON last_msg.id = (
+                        SELECT m2.id
+                        FROM membership_chat_messages m2
+                        WHERE m2.thread_uid = u.uid
+                        ORDER BY m2.id DESC
+                        LIMIT 1
+                    )
+                ORDER BY last_msg.id DESC
+                '''
+            ).fetchall()
+
+        output = []
+        for record in records:
+            output.append({
+                'uid': record['uid'],
+                'name': record['name'],
+                'email': record['email'],
+                'role': record['role'],
+                'request_status': record['request_status'],
+                'request_instrument': record['request_instrument'],
+                'request_section': record['request_section'],
+                'latest_text': record['latest_text'],
+                'latest_created_at': record['latest_created_at'],
+            })
+        return output

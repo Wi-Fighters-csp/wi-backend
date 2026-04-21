@@ -100,9 +100,9 @@
                 </div>
                 <span class="section-badge">{{ pending_requests|length }}</span>
             </div>
-            <div class="request-stack">
+            <div class="request-stack" id="pendingRequestStack">
                 {% for request_row in pending_requests %}
-                <div class="request-card">
+                <div class="request-card" id="request-card-{{ request_row.id }}" data-request-id="{{ request_row.id }}">
                     <div>
                         <h3>{{ request_row.name }}</h3>
                         <p>{{ request_row.email }}</p>
@@ -113,12 +113,29 @@
                         <span class="soft-pill">Submitted {{ request_row.submitted_at }}</span>
                     </div>
                     <div class="request-actions">
-                        <button class="btn btn-primary btn-sm request-action-btn" data-url="/pso/admin/member-requests/{{ request_row.id }}/approve" data-action="approve" {% if not can_manage_pso %}disabled{% endif %}>Approve</button>
-                        <button class="btn btn-outline-danger btn-sm request-action-btn" data-url="/pso/admin/member-requests/{{ request_row.id }}/reject" data-action="reject" {% if not can_manage_pso %}disabled{% endif %}>Reject</button>
+                        <button
+                            class="btn btn-primary btn-sm request-action-btn"
+                            data-url="/api/pso/admin/member-requests/{{ request_row.id }}/approve"
+                            data-action="approve"
+                            data-request-id="{{ request_row.id }}"
+                            {% if not can_manage_pso %}disabled{% endif %}
+                        >
+                            Approve
+                        </button>
+
+                        <button
+                            class="btn btn-outline-danger btn-sm request-action-btn"
+                            data-url="/api/pso/admin/member-requests/{{ request_row.id }}/reject"
+                            data-action="reject"
+                            data-request-id="{{ request_row.id }}"
+                            {% if not can_manage_pso %}disabled{% endif %}
+                        >
+                            Reject
+                        </button>
                     </div>
                 </div>
                 {% else %}
-                <div class="empty-state">No pending requests right now.</div>
+                <div class="empty-state" id="noPendingRequests">No pending requests right now.</div>
                 {% endfor %}
             </div>
         </article>
@@ -522,6 +539,7 @@
     async function sendJson(url, method, payload) {
         const response = await fetch(url, {
             method,
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
@@ -553,15 +571,34 @@
     document.querySelectorAll('.request-action-btn').forEach((button) => {
         button.addEventListener('click', async () => {
             const action = button.dataset.action;
+            const requestId = button.dataset.requestId;
+            const requestCard = document.getElementById(`request-card-${requestId}`);
+            const requestStack = document.getElementById('pendingRequestStack');
+
             if (!confirmAction(`Confirm ${action} request?`)) {
                 return;
             }
 
+            button.disabled = true;
+
             try {
                 const result = await sendJson(button.dataset.url, 'POST');
-                window.alert(result.message || `${action} successful`);
-                window.location.reload();
+
+                if (requestCard) {
+                    requestCard.remove();
+                }
+
+                const remainingCards = requestStack
+                    ? requestStack.querySelectorAll('.request-card')
+                    : [];
+
+                if (requestStack && remainingCards.length === 0) {
+                    requestStack.innerHTML = '<div class="empty-state" id="noPendingRequests">No pending requests right now.</div>';
+                }
+
+                window.alert(result.message || `Request ${action}d successfully.`);
             } catch (error) {
+                button.disabled = false;
                 window.alert(error.message);
             }
         });

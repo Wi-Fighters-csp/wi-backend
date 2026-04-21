@@ -398,31 +398,6 @@ class PSOAPI:
                 'role': current_user.role
             })
 
-    class _Recommendations(Resource):
-        def post(self):
-            current_user, error_body, status_code = PSOAuthService.authenticate_request()
-            if error_body:
-                return error_body, status_code
-
-            body = request.get_json() or {}
-            favorite_performances = body.get('favorite_performances') or []
-            
-            if not favorite_performances:
-                return jsonify({
-                    'message': 'No favorite performances provided',
-                    'recommendations': []
-                }), 200
-
-            recommendations = PSOAuthService.get_concert_recommendations(
-                current_user.uid,
-                favorite_performances
-            )
-            
-            return jsonify({
-                'message': 'Recommendations generated',
-                'recommendations': recommendations
-            }), 200
-
 api.add_resource(PSOAPI._Signup, '/pso/signup')
 api.add_resource(PSOAPI._Authenticate, '/authenticate')
 api.add_resource(PSOAPI._Identity, '/id')
@@ -439,4 +414,3 @@ api.add_resource(PSOAPI._AdminApproveMemberRequest, '/pso/admin/member-requests/
 api.add_resource(PSOAPI._AdminRejectMemberRequest, '/pso/admin/member-requests/<int:request_id>/reject')
 api.add_resource(PSOAPI._AdminMembers, '/pso/admin/members')
 api.add_resource(PSOAPI._AdminAccess, '/pso/admin/access')
-api.add_resource(PSOAPI._Recommendations, '/pso/recommendations')

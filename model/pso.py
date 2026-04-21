@@ -1070,6 +1070,84 @@ class PSOAuthService:
 
         return [dict(record) for record in records]
 
+    @staticmethod
+    def list_member_cards(current_user=None, family=None, section_id=None):
+        PSOAuthService.ensure_database()
+
+        query = (
+            'SELECT id, owner_uid, owner_name, family, section_id, instrument_title, '
+            'image_url, bio, created_by_uid, created_at, updated_at '
+            'FROM member_cards '
+        )
+        parameters = []
+        filters = []
+
+        normalized_family = str(family or '').strip()
+        if normalized_family:
+            filters.append('family = ?')
+            parameters.append(normalized_family)
+
+        normalized_section_id = str(section_id or '').strip()
+        if normalized_section_id:
+            filters.append('section_id = ?')
+            parameters.append(normalized_section_id)
+
+        if filters:
+            query += 'WHERE ' + ' AND '.join(filters) + ' '
+
+        query += 'ORDER BY updated_at DESC, id DESC'
+
+        with PSOAuthService.get_connection() as connection:
+            records = connection.execute(query, tuple(parameters)).fetchall()
+
+        return [dict(record) for record in records]
+
+    @staticmethod
+    def list_progression_leaderboard(limit=25):
+        PSOAuthService.ensure_database()
+
+        try:
+            normalized_limit = max(1, min(int(limit or 25), 100))
+        except (TypeError, ValueError):
+            normalized_limit = 25
+
+        with PSOAuthService.get_connection() as connection:
+            records = connection.execute(
+                '''
+                SELECT up.uid, up.xp, up.completed_quests, up.last_updated_at,
+                       u.name, u.email, u.role,
+                       om.instrument, om.section
+                FROM user_progression up
+                JOIN users u ON u.uid = up.uid
+                LEFT JOIN orchestra_members om ON om.uid = up.uid
+                ORDER BY up.xp DESC, up.last_updated_at DESC, u.name COLLATE NOCASE ASC, up.uid COLLATE NOCASE ASC
+                LIMIT ?
+                ''',
+                (normalized_limit,)
+            ).fetchall()
+
+        leaderboard = []
+        for index, record in enumerate(records, start=1):
+            try:
+                completed_quests = json.loads(record['completed_quests'] or '[]')
+            except (TypeError, ValueError, json.JSONDecodeError):
+                completed_quests = []
+
+            leaderboard.append({
+                'rank': index,
+                'uid': record['uid'],
+                'name': record['name'],
+                'email': record['email'],
+                'role': record['role'],
+                'xp': PSOAuthService.normalize_progression_xp(record['xp']),
+                'completed_quest_count': len(PSOAuthService.normalize_completed_quests(completed_quests)),
+                'instrument': record['instrument'],
+                'section': record['section'],
+                'last_updated_at': record['last_updated_at'],
+            })
+
+        return leaderboard
+
     # ------------------------------
     # NEW CHAT HELPERS
     # ------------------------------

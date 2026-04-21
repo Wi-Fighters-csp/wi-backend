@@ -522,13 +522,25 @@
     async function sendJson(url, method, payload) {
         const response = await fetch(url, {
             method,
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
             body: payload ? JSON.stringify(payload) : undefined
         });
 
-        const data = await response.json().catch(() => ({}));
+        const contentType = response.headers.get('content-type') || '';
+        let data = {};
+
+        if (contentType.includes('application/json')) {
+            data = await response.json();
+        } else {
+            const text = await response.text();
+            data = { message: text };
+        }
+
         if (!response.ok) {
-            throw new Error(data.message || data.error || 'Request failed.');
+            throw new Error(data.message || data.error || `Request failed with status ${response.status}`);
         }
 
         return data;
@@ -546,7 +558,8 @@
             }
 
             try {
-                await sendJson(button.dataset.url, 'POST');
+                const result = await sendJson(button.dataset.url, 'POST');
+                window.alert(result.message || `${action} successful`);
                 window.location.reload();
             } catch (error) {
                 window.alert(error.message);

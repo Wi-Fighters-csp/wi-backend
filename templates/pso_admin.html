@@ -114,23 +114,10 @@
                     </div>
                     <div class="request-actions">
                         <button
-                            class="btn btn-primary btn-sm request-action-btn"
-                            data-url="/api/pso/admin/member-requests/{{ request_row.id }}/approve"
-                            data-action="approve"
+                            class="btn btn-primary btn-sm open-request-review"
                             data-request-id="{{ request_row.id }}"
-                            {% if not can_manage_pso %}disabled{% endif %}
                         >
-                            Approve
-                        </button>
-
-                        <button
-                            class="btn btn-outline-danger btn-sm request-action-btn"
-                            data-url="/api/pso/admin/member-requests/{{ request_row.id }}/reject"
-                            data-action="reject"
-                            data-request-id="{{ request_row.id }}"
-                            {% if not can_manage_pso %}disabled{% endif %}
-                        >
-                            Reject
+                            View Full Request
                         </button>
                     </div>
                 </div>
@@ -495,10 +482,92 @@
     </div>
 </div>
 
+<div class="modal fade" id="requestReviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content themed-panel modal-panel">
+            <div class="modal-header">
+                <h5 class="modal-title">Full Member Request Review</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="reviewRequestId">
+                <div class="request-review-grid">
+                    <div class="request-review-item">
+                        <span class="request-review-label">Name</span>
+                        <strong id="reviewName">-</strong>
+                    </div>
+                    <div class="request-review-item">
+                        <span class="request-review-label">UID</span>
+                        <strong id="reviewUid">-</strong>
+                    </div>
+                    <div class="request-review-item">
+                        <span class="request-review-label">Email</span>
+                        <strong id="reviewEmail">-</strong>
+                    </div>
+                    <div class="request-review-item">
+                        <span class="request-review-label">Instrument</span>
+                        <strong id="reviewInstrument">-</strong>
+                    </div>
+                    <div class="request-review-item">
+                        <span class="request-review-label">Section</span>
+                        <strong id="reviewSection">-</strong>
+                    </div>
+                    <div class="request-review-item">
+                        <span class="request-review-label">Status</span>
+                        <strong id="reviewStatus">-</strong>
+                    </div>
+                    <div class="request-review-item">
+                        <span class="request-review-label">Submitted</span>
+                        <strong id="reviewSubmittedAt">-</strong>
+                    </div>
+                    <div class="request-review-item">
+                        <span class="request-review-label">Reviewed</span>
+                        <strong id="reviewReviewedAt">Not reviewed</strong>
+                    </div>
+                    <div class="request-review-item">
+                        <span class="request-review-label">Phone</span>
+                        <strong id="reviewPhone">--</strong>
+                    </div>
+                    <div class="request-review-item">
+                        <span class="request-review-label">Years of Experience</span>
+                        <strong id="reviewExperience">--</strong>
+                    </div>
+                    <div class="request-review-item">
+                        <span class="request-review-label">Background</span>
+                        <strong id="reviewBackground">--</strong>
+                    </div>
+                    <div class="request-review-item">
+                        <span class="request-review-label">Audition / Interview Piece</span>
+                        <strong id="reviewPiece">--</strong>
+                    </div>
+                    <div class="request-review-item">
+                        <span class="request-review-label">Availability</span>
+                        <strong id="reviewAvailability">--</strong>
+                    </div>
+                    <div class="request-review-item">
+                        <span class="request-review-label">Video Upload</span>
+                        <strong id="reviewVideoFile">None uploaded</strong>
+                    </div>
+                    <div class="request-review-item">
+                        <span class="request-review-label">Video Link</span>
+                        <strong id="reviewVideoLink">None provided</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer request-review-actions">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-outline-danger" id="reviewRejectBtn" {% if not can_manage_pso %}disabled{% endif %}>Reject</button>
+                <button type="button" class="btn btn-primary" id="reviewApproveBtn" {% if not can_manage_pso %}disabled{% endif %}>Approve</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     const userRecords = {{ users|tojson }};
     const memberRecords = {{ members|tojson }};
     const cardRecords = {{ member_cards|tojson }};
+    const canManagePso = {{ can_manage_pso|tojson }};
 
     const userMap = new Map(userRecords.map((record) => [record.uid, record]));
     const memberMap = new Map(memberRecords.map((record) => [record.uid, record]));
@@ -507,6 +576,7 @@
     const userModal = new bootstrap.Modal(document.getElementById('userModal'));
     const memberModal = new bootstrap.Modal(document.getElementById('memberModal'));
     const cardModal = new bootstrap.Modal(document.getElementById('cardModal'));
+    const requestReviewModal = new bootstrap.Modal(document.getElementById('requestReviewModal'));
     const dashboardViews = Array.from(document.querySelectorAll('.dashboard-panel-view'));
     const dashboardButtons = Array.from(document.querySelectorAll('.dashboard-toggle'));
     const dashboardPlaceholder = document.getElementById('dashboard-placeholder');
@@ -568,37 +638,74 @@
         return window.confirm(message);
     }
 
-    document.querySelectorAll('.request-action-btn').forEach((button) => {
-        button.addEventListener('click', async () => {
-            const action = button.dataset.action;
-            const requestId = button.dataset.requestId;
-            const requestCard = document.getElementById(`request-card-${requestId}`);
-            const requestStack = document.getElementById('pendingRequestStack');
+    function setReviewValue(elementId, value, fallback = '-') {
+        const element = document.getElementById(elementId);
+        if (!element) {
+            return;
+        }
 
-            if (!confirmAction(`Confirm ${action} request?`)) {
+        element.textContent = value === null || value === undefined || value === '' ? fallback : String(value);
+    }
+
+    async function runReviewAction(action) {
+        const requestId = document.getElementById('reviewRequestId').value;
+        if (!requestId || !canManagePso) {
+            return;
+        }
+
+        if (!confirmAction(`Confirm ${action} request?`)) {
+            return;
+        }
+
+        const endpoint = `/api/pso/admin/member-requests/${encodeURIComponent(requestId)}/${action}`;
+
+        try {
+            const result = await sendJson(endpoint, 'POST');
+            window.alert(result.message || `Request ${action}d successfully.`);
+            window.location.reload();
+        } catch (error) {
+            window.alert(error.message);
+        }
+    }
+
+    document.getElementById('reviewApproveBtn').addEventListener('click', async () => {
+        await runReviewAction('approve');
+    });
+
+    document.getElementById('reviewRejectBtn').addEventListener('click', async () => {
+        await runReviewAction('reject');
+    });
+
+    document.querySelectorAll('.open-request-review').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const requestId = button.dataset.requestId;
+            if (!requestId) {
                 return;
             }
 
-            button.disabled = true;
-
             try {
-                const result = await sendJson(button.dataset.url, 'POST');
+                const detail = await sendJson(`/api/pso/admin/member-requests/${encodeURIComponent(requestId)}`, 'GET');
+                const requestData = detail.request || {};
 
-                if (requestCard) {
-                    requestCard.remove();
-                }
+                document.getElementById('reviewRequestId').value = requestId;
+                setReviewValue('reviewName', requestData.name);
+                setReviewValue('reviewUid', requestData.uid);
+                setReviewValue('reviewEmail', requestData.email);
+                setReviewValue('reviewInstrument', requestData.instrument);
+                setReviewValue('reviewSection', requestData.section);
+                setReviewValue('reviewStatus', requestData.status);
+                setReviewValue('reviewSubmittedAt', requestData.submitted_at);
+                setReviewValue('reviewReviewedAt', requestData.reviewed_at, 'Not reviewed');
+                setReviewValue('reviewPhone', requestData.phone, '--');
+                setReviewValue('reviewExperience', requestData.experience, '--');
+                setReviewValue('reviewBackground', requestData.background, '--');
+                setReviewValue('reviewPiece', requestData.piece, '--');
+                setReviewValue('reviewAvailability', requestData.availability, '--');
+                setReviewValue('reviewVideoFile', requestData.video_file, 'None uploaded');
+                setReviewValue('reviewVideoLink', requestData.video_link, 'None provided');
 
-                const remainingCards = requestStack
-                    ? requestStack.querySelectorAll('.request-card')
-                    : [];
-
-                if (requestStack && remainingCards.length === 0) {
-                    requestStack.innerHTML = '<div class="empty-state" id="noPendingRequests">No pending requests right now.</div>';
-                }
-
-                window.alert(result.message || `Request ${action}d successfully.`);
+                requestReviewModal.show();
             } catch (error) {
-                button.disabled = false;
                 window.alert(error.message);
             }
         });
@@ -1087,6 +1194,33 @@
         align-items: center;
     }
 
+    .request-review-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.85rem;
+    }
+
+    .request-review-item {
+        display: grid;
+        gap: 0.25rem;
+        padding: 0.75rem;
+        border-radius: 12px;
+        border: 1px solid rgba(250, 243, 224, 0.14);
+        background: rgba(250, 243, 224, 0.06);
+    }
+
+    .request-review-label {
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        opacity: 0.82;
+    }
+
+    .request-review-actions {
+        justify-content: flex-end;
+        gap: 0.5rem;
+    }
+
     .request-card p,
     .admin-person-card p,
     .member-card-admin p {
@@ -1257,7 +1391,8 @@
     @media (max-width: 720px) {
         .stats-grid,
         .panel-grid.two-up,
-        .two-column-form {
+        .two-column-form,
+        .request-review-grid {
             grid-template-columns: 1fr;
         }
 

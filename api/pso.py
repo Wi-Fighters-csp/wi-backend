@@ -142,7 +142,22 @@ class PSOAPI:
                 body.get('name') or current_user.name,
                 body.get('email'),
                 body.get('instrument'),
-                body.get('section')
+                body.get('section'),
+                body.get('phone') or body.get('phoneNumber') or body.get('phone_number'),
+                body.get('experience')
+                or body.get('years')
+                or body.get('yearsOfExperience')
+                or body.get('years_of_experience'),
+                body.get('background')
+                or body.get('bio')
+                or body.get('shortBackground')
+                or body.get('short_background')
+                or body.get('musicalBackground')
+                or body.get('musical_background'),
+                body.get('piece') or body.get('auditionPiece') or body.get('audition_piece'),
+                body.get('availability'),
+                body.get('video') or body.get('videoFile') or body.get('video_file'),
+                body.get('videoLink') or body.get('video_link') or body.get('videoUrl') or body.get('video_url')
             )
             if error_body:
                 return error_body, status_code
@@ -362,6 +377,48 @@ class PSOAPI:
             response.status_code = status_code
             return response
 
+    class _AdminMemberRequestDetail(Resource, _AdminMixin):
+        def get(self, request_id):
+            current_user, error_body, status_code = PSOAuthService.authenticate_request()
+            if error_body:
+                return error_body, status_code
+
+            admin_error, admin_status = self.require_admin(current_user)
+            if admin_error:
+                return admin_error, admin_status
+
+            detail, error_body, status_code = PSOAuthService.get_admin_member_request_detail(request_id)
+            if error_body:
+                return error_body, status_code
+
+            return jsonify(detail)
+
+    class _AdminMemberRequestChatMessages(Resource, _AdminMixin):
+        def post(self, request_id):
+            current_user, error_body, status_code = PSOAuthService.authenticate_request()
+            if error_body:
+                return error_body, status_code
+
+            admin_error, admin_status = self.require_admin(current_user)
+            if admin_error:
+                return admin_error, admin_status
+
+            body = request.get_json() or {}
+            message, error_body, status_code = PSOAuthService.send_chat_message_for_request(
+                request_id=request_id,
+                sender_user=current_user,
+                text=body.get('text')
+            )
+            if error_body:
+                return error_body, status_code
+
+            response = jsonify({
+                'message': 'Chat message sent.',
+                'chat_message': message
+            })
+            response.status_code = status_code
+            return response
+
     class _AdminMembers(Resource, _AdminMixin):
         def get(self):
             current_user, error_body, status_code = PSOAuthService.authenticate_request()
@@ -463,6 +520,8 @@ api.add_resource(PSOAPI._MemberCardDetail, '/pso/member-cards/<int:card_id>')
 api.add_resource(PSOAPI._AdminMemberRequests, '/pso/admin/member-requests')
 api.add_resource(PSOAPI._AdminApproveMemberRequest, '/pso/admin/member-requests/<int:request_id>/approve')
 api.add_resource(PSOAPI._AdminRejectMemberRequest, '/pso/admin/member-requests/<int:request_id>/reject')
+api.add_resource(PSOAPI._AdminMemberRequestDetail, '/pso/admin/member-requests/<int:request_id>')
+api.add_resource(PSOAPI._AdminMemberRequestChatMessages, '/pso/admin/member-requests/<int:request_id>/chat/messages')
 api.add_resource(PSOAPI._AdminMembers, '/pso/admin/members')
 api.add_resource(PSOAPI._AdminAccess, '/pso/admin/access')
 

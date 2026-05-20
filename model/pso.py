@@ -249,6 +249,13 @@ class PSOAuthService:
                     email TEXT NOT NULL,
                     instrument TEXT NOT NULL,
                     section TEXT NOT NULL,
+                    phone TEXT,
+                    experience TEXT,
+                    background TEXT,
+                    piece TEXT,
+                    availability TEXT,
+                    video_file TEXT,
+                    video_link TEXT,
                     status TEXT NOT NULL DEFAULT 'pending',
                     submitted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     reviewed_at TEXT,
@@ -258,6 +265,24 @@ class PSOAuthService:
                 )
                 '''
             )
+
+            request_columns = {
+                column['name'] for column in connection.execute('PRAGMA table_info(member_requests)').fetchall()
+            }
+            if 'phone' not in request_columns:
+                connection.execute("ALTER TABLE member_requests ADD COLUMN phone TEXT")
+            if 'experience' not in request_columns:
+                connection.execute("ALTER TABLE member_requests ADD COLUMN experience TEXT")
+            if 'background' not in request_columns:
+                connection.execute("ALTER TABLE member_requests ADD COLUMN background TEXT")
+            if 'piece' not in request_columns:
+                connection.execute("ALTER TABLE member_requests ADD COLUMN piece TEXT")
+            if 'availability' not in request_columns:
+                connection.execute("ALTER TABLE member_requests ADD COLUMN availability TEXT")
+            if 'video_file' not in request_columns:
+                connection.execute("ALTER TABLE member_requests ADD COLUMN video_file TEXT")
+            if 'video_link' not in request_columns:
+                connection.execute("ALTER TABLE member_requests ADD COLUMN video_link TEXT")
 
             connection.execute(
                 '''
@@ -832,6 +857,8 @@ class PSOAuthService:
             record = connection.execute(
                 '''
                 SELECT mr.id, mr.user_id, mr.uid, mr.name, mr.email, mr.instrument, mr.section,
+                      mr.phone, mr.experience, mr.background, mr.piece, mr.availability,
+                      mr.video_file, mr.video_link,
                        mr.status, mr.submitted_at, mr.reviewed_at, mr.reviewed_by,
                        reviewer.uid AS reviewed_by_uid, reviewer.name AS reviewed_by_name
                 FROM member_requests mr
@@ -853,6 +880,8 @@ class PSOAuthService:
             record = connection.execute(
                 '''
                 SELECT mr.id, mr.user_id, mr.uid, mr.name, mr.email, mr.instrument, mr.section,
+                      mr.phone, mr.experience, mr.background, mr.piece, mr.availability,
+                      mr.video_file, mr.video_link,
                        mr.status, mr.submitted_at, mr.reviewed_at, mr.reviewed_by,
                        reviewer.uid AS reviewed_by_uid, reviewer.name AS reviewed_by_name
                 FROM member_requests mr
@@ -895,7 +924,20 @@ class PSOAuthService:
         }
 
     @staticmethod
-    def submit_member_request(uid, name, email, instrument, section):
+    def submit_member_request(
+        uid,
+        name,
+        email,
+        instrument,
+        section,
+        phone=None,
+        experience=None,
+        background=None,
+        piece=None,
+        availability=None,
+        video_file=None,
+        video_link=None,
+    ):
         if email is None or len(str(email).strip()) < 3 or '@' not in str(email):
             return None, {'message': 'Email is missing or invalid'}, 400
 
@@ -920,29 +962,83 @@ class PSOAuthService:
             return None, {'message': 'User is already registered as a member'}, 409
 
         latest_request = PSOAuthService.get_latest_member_request(uid)
-        if latest_request is not None and latest_request['status'] == 'pending':
-            return None, {'message': 'Member request is already pending'}, 409
-
+        normalized_name = str(name).strip()
+        normalized_instrument = str(instrument).strip()
+        normalized_section = str(section).strip()
         normalized_email = str(email).strip().lower()
+        normalized_phone = None if phone is None else str(phone).strip()
+        normalized_experience = None if experience is None else str(experience).strip()
+        normalized_background = None if background is None else str(background).strip()
+        normalized_piece = None if piece is None else str(piece).strip()
+        normalized_availability = None if availability is None else str(availability).strip()
+        normalized_video_file = None if video_file is None else str(video_file).strip()
+        normalized_video_link = None if video_link is None else str(video_link).strip()
+
         updated, error_body, status_code = PSOAuthService.update_user_email(uid, normalized_email)
         if not updated:
             return None, error_body, status_code
 
         user = PSOAuthService.find_user_by_uid(uid)
 
+        if latest_request is not None and latest_request['status'] == 'pending':
+            update_fields = {
+                'name': normalized_name,
+                'email': user.email,
+                'instrument': normalized_instrument,
+                'section': normalized_section,
+            }
+
+            if normalized_phone is not None:
+                update_fields['phone'] = normalized_phone
+            if normalized_experience is not None:
+                update_fields['experience'] = normalized_experience
+            if normalized_background is not None:
+                update_fields['background'] = normalized_background
+            if normalized_piece is not None:
+                update_fields['piece'] = normalized_piece
+            if normalized_availability is not None:
+                update_fields['availability'] = normalized_availability
+            if normalized_video_file is not None:
+                update_fields['video_file'] = normalized_video_file
+            if normalized_video_link is not None:
+                update_fields['video_link'] = normalized_video_link
+
+            assignments = ', '.join([f"{key} = ?" for key in update_fields.keys()])
+            parameters = list(update_fields.values()) + [latest_request['id']]
+
+            with PSOAuthService.get_connection() as connection:
+                connection.execute(
+                    f'UPDATE member_requests SET {assignments} WHERE id = ?',
+                    tuple(parameters)
+                )
+                connection.commit()
+
+            return PSOAuthService.get_member_request_by_id(latest_request['id']), None, 200
+
         with PSOAuthService.get_connection() as connection:
             cursor = connection.execute(
                 '''
-                INSERT INTO member_requests (user_id, uid, name, email, instrument, section, status)
-                VALUES (?, ?, ?, ?, ?, ?, 'pending')
+                INSERT INTO member_requests (
+                    user_id, uid, name, email, instrument, section,
+                    phone, experience, background, piece, availability,
+                    video_file, video_link, status
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
                 ''',
                 (
                     user.id,
                     user.uid,
-                    str(name).strip(),
+                    normalized_name,
                     user.email,
-                    str(instrument).strip(),
-                    str(section).strip(),
+                    normalized_instrument,
+                    normalized_section,
+                    normalized_phone,
+                    normalized_experience,
+                    normalized_background,
+                    normalized_piece,
+                    normalized_availability,
+                    normalized_video_file,
+                    normalized_video_link,
                 )
             )
             connection.commit()
@@ -972,6 +1068,8 @@ class PSOAuthService:
         PSOAuthService.ensure_database()
         query = (
             'SELECT mr.id, mr.user_id, mr.uid, mr.name, mr.email, mr.instrument, mr.section, '
+            'mr.phone, mr.experience, mr.background, mr.piece, mr.availability, '
+            'mr.video_file, mr.video_link, '
             'mr.status, mr.submitted_at, mr.reviewed_at, mr.reviewed_by, '
             'reviewer.uid AS reviewed_by_uid, reviewer.name AS reviewed_by_name '
             'FROM member_requests mr '
@@ -987,6 +1085,23 @@ class PSOAuthService:
             records = connection.execute(query, tuple(parameters)).fetchall()
 
         return [dict(record) for record in records]
+
+    @staticmethod
+    def get_admin_member_request_detail(request_id):
+        request_row = PSOAuthService.get_member_request_by_id(request_id)
+        if request_row is None:
+            return None, {'message': 'Request not found'}, 404
+
+        request_uid = str(request_row['uid'] or '').strip()
+        target_user = PSOAuthService.find_user_by_uid(request_uid)
+        target_member = PSOAuthService.get_member_by_uid(request_uid)
+
+        return {
+            'request': request_row,
+            'user': target_user.read() if target_user is not None else None,
+            'member': target_member,
+            'messages': PSOAuthService.list_chat_messages(request_uid)
+        }, None, 200
 
     @staticmethod
     def approve_member_request(request_id, admin_user):
@@ -1221,6 +1336,18 @@ class PSOAuthService:
             ).fetchone()
 
         return PSOAuthService.serialize_chat_message(record), None, 201
+
+    @staticmethod
+    def send_chat_message_for_request(request_id, sender_user, text):
+        request_row = PSOAuthService.get_member_request_by_id(request_id)
+        if request_row is None:
+            return None, {'message': 'Request not found'}, 404
+
+        return PSOAuthService.send_chat_message(
+            thread_uid=request_row['uid'],
+            sender_user=sender_user,
+            text=text
+        )
 
     @staticmethod
     def get_chat_thread_for_user(current_user, thread_uid=None):

@@ -252,7 +252,6 @@
             <table class="table admin-table compact-table">
                 <thead>
                     <tr>
-                        <th>UID</th>
                         <th>Name</th>
                         <th>Email</th>
                         <th>Role</th>
@@ -263,19 +262,18 @@
                 <tbody>
                     {% for user_row in users %}
                     <tr>
-                        <td>{{ user_row.uid }}</td>
                         <td>{{ user_row.name }}</td>
                         <td>{{ user_row.email }}</td>
                         <td><span class="soft-pill">{{ user_row.role }}</span></td>
-                        <td>{{ user_row.created_at }}</td>
+                        <td>{{ user_row.created }}</td>
                         <td class="action-cell">
-                            <button class="btn btn-primary btn-sm open-user-modal" data-uid="{{ user_row.uid }}">Edit</button>
-                            <button class="btn btn-outline-danger btn-sm delete-entity-btn" data-kind="user" data-id="{{ user_row.uid }}">Delete</button>
+                            <button class="btn btn-primary btn-sm open-user-modal" data-email="{{ user_row.email }}">Edit</button>
+                            <button class="btn btn-outline-danger btn-sm delete-entity-btn" data-kind="user" data-id="{{ user_row.email }}">Delete</button>
                         </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="6" class="empty-row">No registered users.</td>
+                        <td colspan="5" class="empty-row">No registered users.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -637,7 +635,7 @@
     const canManagePso = {{ can_manage_pso|tojson }};
     const initialAdminChatThreads = {{ admin_chat_threads|tojson }};
 
-    const userMap = new Map(userRecords.map((record) => [record.uid, record]));
+    const userMap = new Map(userRecords.map((record) => [record.email, record]));
     const memberMap = new Map(memberRecords.map((record) => [record.uid, record]));
     const cardMap = new Map(cardRecords.map((record) => [String(record.id), record]));
     const pendingRequestMap = new Map(pendingRequestRecords.map((record) => [String(record.id), record]));
@@ -1020,12 +1018,12 @@
 
     document.querySelectorAll('.open-user-modal').forEach((button) => {
         button.addEventListener('click', () => {
-            const user = userMap.get(button.dataset.uid);
+            const user = userMap.get(button.dataset.email);
             if (!user) {
                 return;
             }
 
-            document.getElementById('userUid').value = user.uid;
+            document.getElementById('userUid').value = user.email;
             document.getElementById('userName').value = user.name || '';
             document.getElementById('userEmail').value = user.email || '';
             document.getElementById('userRole').value = (user.role || 'user').toLowerCase();

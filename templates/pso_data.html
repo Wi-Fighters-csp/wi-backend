@@ -30,8 +30,8 @@
                 {% endfor %}
                 {% if current_user.role == 'Admin' %}
                 <td>
-                    <button class="btn btn-primary btn-sm pso-edit-btn" data-page-type="{{ page_type }}" data-uid="{{ row.get('uid', '') }}" data-record-id="{{ row.get('id', '') }}">Edit</button>
-                    <button class="btn btn-danger btn-sm pso-delete-btn" data-page-type="{{ page_type }}" data-uid="{{ row.get('uid', '') }}" data-record-id="{{ row.get('id', '') }}">Delete</button>
+                    <button class="btn btn-primary btn-sm pso-edit-btn" data-page-type="{{ page_type }}" data-uid="{{ row.get('email', '') if page_type == 'users' else row.get('uid', '') }}" data-record-id="{{ row.get('id', '') }}">Edit</button>
+                    <button class="btn btn-danger btn-sm pso-delete-btn" data-page-type="{{ page_type }}" data-uid="{{ row.get('email', '') if page_type == 'users' else row.get('uid', '') }}" data-record-id="{{ row.get('id', '') }}">Delete</button>
                 </td>
                 {% endif %}
             </tr>
@@ -130,15 +130,15 @@
                 };
             }
 
-            const name = prompt('Edit user name:', row.children[2].innerText.trim());
+            const name = prompt('Edit user name:', row.children[0].innerText.trim());
             if (name === null) {
                 return null;
             }
-            const email = prompt('Edit user email:', row.children[3].innerText.trim());
+            const email = prompt('Edit user email:', row.children[1].innerText.trim());
             if (email === null) {
                 return null;
             }
-            const role = prompt('Edit user role:', row.children[4].innerText.trim());
+            const role = prompt('Edit user role:', row.children[2].innerText.trim());
             if (role === null) {
                 return null;
             }
@@ -161,7 +161,7 @@
                     return;
                 }
 
-                const response = await fetch(endpointFor(pageType, identifier), {
+                const response = await fetch(endpointFor(pageType, encodeURIComponent(identifier)), {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -185,7 +185,7 @@
                     return;
                 }
 
-                const response = await fetch(endpointFor(pageType, identifier), {
+                const response = await fetch(endpointFor(pageType, encodeURIComponent(identifier)), {
                     method: 'DELETE'
                 });
                 const data = await response.json();

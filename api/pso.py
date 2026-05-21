@@ -18,25 +18,23 @@ api = Api(pso_api)
 class PSOAPI:
     @staticmethod
     def _normalize_signup_identity(body):
-        raw_uid = (
-            body.get('uid')
-            or body.get('username')
-            or body.get('userId')
-            or body.get('user_id')
-            or body.get('login')
-        )
         raw_email = body.get('email')
-
-        normalized_uid = str(raw_uid or '').strip()
         normalized_email = str(raw_email or '').strip().lower()
 
-        # Support clients that send email in the uid/username field.
-        if not normalized_email and '@' in normalized_uid:
-            normalized_email = normalized_uid.lower()
+        if not normalized_email:
+            fallback_identity = (
+                body.get('uid')
+                or body.get('username')
+                or body.get('userId')
+                or body.get('user_id')
+                or body.get('login')
+            )
+            normalized_fallback = str(fallback_identity or '').strip().lower()
+            if '@' in normalized_fallback:
+                normalized_email = normalized_fallback
 
-        # For new signups, allow email to be the primary identifier.
-        if not normalized_uid and normalized_email:
-            normalized_uid = normalized_email
+        # Canonical rule: uid and email must be the same value.
+        normalized_uid = normalized_email
 
         return normalized_uid, normalized_email
 
@@ -201,7 +199,7 @@ class PSOAPI:
 
             latest_request = PSOAuthService.get_latest_member_request(current_user.uid)
             return jsonify({
-                'uid': current_user.uid,
+                'email': current_user.email,
                 'is_member': PSOAuthService.is_member(current_user.uid),
                 'member_request_status': PSOAuthService.get_member_request_status(current_user.uid),
                 'request': latest_request
@@ -217,7 +215,6 @@ class PSOAPI:
             if member is None:
                 return jsonify({
                     'is_member': False,
-                    'uid': current_user.uid,
                     'name': current_user.name,
                     'email': current_user.email,
                     'member_request_status': PSOAuthService.get_member_request_status(current_user.uid),

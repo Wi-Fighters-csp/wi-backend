@@ -249,12 +249,10 @@ def pso_users():
         page_type='users',
         table_id='psoUsersTable',
         columns=[
-            ('id', 'ID'),
-            ('uid', 'UID'),
             ('name', 'Name'),
             ('email', 'Email'),
             ('role', 'Role'),
-            ('created_at', 'Created'),
+            ('created', 'Created'),
         ],
         rows=PSOAuthService.list_users()
     )
@@ -303,29 +301,40 @@ def pso_member_cards():
         rows=PSOAuthService.list_member_cards()
     )
 
-@app.route('/pso/users/<string:uid>', methods=['PUT'])
+@app.route('/pso/users/<string:identifier>', methods=['PUT'])
 @login_required
-def update_pso_user(uid):
+def update_pso_user(identifier):
     admin_error = require_site_admin()
     if admin_error:
         return admin_error
 
-    updated_user, error_body, status_code = PSOAuthService.update_pso_user(uid, request.get_json() or {})
+    target_user = PSOAuthService.find_user_by_identifier(identifier)
+    if target_user is None:
+        return jsonify({'message': 'PSO user not found'}), 404
+
+    updated_user, error_body, status_code = PSOAuthService.update_pso_user(target_user.uid, request.get_json() or {})
     if error_body:
         return jsonify(error_body), status_code
 
     return jsonify({'message': 'PSO user updated successfully.', 'user': updated_user}), status_code
 
-@app.route('/pso/users/<string:uid>', methods=['DELETE'])
+@app.route('/pso/users/<string:identifier>', methods=['DELETE'])
 @login_required
-def delete_pso_user(uid):
+def delete_pso_user(identifier):
     admin_error = require_site_admin()
     if admin_error:
         return admin_error
 
-    deleted, error_body, status_code = PSOAuthService.delete_pso_user(uid)
-    if error_body:
+    target_user = PSOAuthService.find_user_by_identifier(identifier)
+    if target_user is None:
+        return jsonify({'message': 'PSO user already deleted.'}), 200
+
+    deleted, error_body, status_code = PSOAuthService.delete_pso_user(target_user.uid)
+    if error_body and status_code != 404:
         return jsonify(error_body), status_code
+
+    if status_code == 404:
+        return jsonify({'message': 'PSO user already deleted.'}), 200
 
     return jsonify({'message': 'PSO user deleted successfully.'}), status_code
 

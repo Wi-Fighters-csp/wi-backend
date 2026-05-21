@@ -30,7 +30,6 @@ class PSOUser:
     def read(self):
         return {
             'id': self.id,
-            'uid': self.email,
             'name': self.name,
             'email': self.email,
             'role': self.role
@@ -747,7 +746,7 @@ class PSOAuthService:
         with PSOAuthService.get_connection() as connection:
             records = connection.execute(
                 '''
-                SELECT id, uid, name, email, role, created_at
+                SELECT name, email, role, created_at AS created
                 FROM users
                 ORDER BY name COLLATE NOCASE ASC, uid COLLATE NOCASE ASC
                 '''
@@ -761,7 +760,7 @@ class PSOAuthService:
         with PSOAuthService.get_connection() as connection:
             records = connection.execute(
                 '''
-                SELECT id, uid, name, email, role, created_at
+                SELECT name, email, role, created_at AS created
                 FROM users
                 WHERE LOWER(TRIM(role)) IN ('admin', 'superadmin')
                 ORDER BY name COLLATE NOCASE ASC, uid COLLATE NOCASE ASC
@@ -847,8 +846,8 @@ class PSOAuthService:
             return None, {'message': 'Password must be at least 8 characters'}, 400
 
         normalized_name = str(name).strip()
-        normalized_uid = str(uid).strip()
         normalized_email = str(email).strip().lower()
+        normalized_uid = normalized_email
         normalized_role = PSOAuthService.normalize_role(role)
 
         existing_user = PSOAuthService.find_user_by_uid(normalized_uid)
@@ -907,7 +906,7 @@ class PSOAuthService:
 
         if identifier is None or len(normalized_identifier) == 0:
             current_app.logger.warning('PSO auth failed: missing identifier')
-            return None, {'message': 'User ID is missing'}, 401
+            return None, {'message': 'Email is missing'}, 401
 
         if password is None or len(str(password)) == 0:
             current_app.logger.warning('PSO auth failed for identifier=%s: missing password', normalized_identifier)
@@ -932,7 +931,7 @@ class PSOAuthService:
                 return synced_user, None, None
 
         return None, {
-            'message': 'Invalid Poway Orchestra user ID or password. If you have not created a Poway account yet, sign up first.'
+            'message': 'Invalid email or password. If you have not created a Poway account yet, sign up first.'
         }, 401
 
     @staticmethod
@@ -1011,7 +1010,6 @@ class PSOAuthService:
     def signup_payload(user):
         return {
             'message': 'Signup successful',
-            'uid': user.email,
             'name': user.name,
             'email': user.email,
             'role': user.role,
@@ -1022,7 +1020,6 @@ class PSOAuthService:
     def login_payload(user):
         return {
             'message': 'Login successful',
-            'uid': user.email,
             'name': user.name,
             'email': user.email,
             'role': user.role,
@@ -1033,13 +1030,12 @@ class PSOAuthService:
     def logout_payload(user):
         return {
             'message': 'Logout successful',
-            'uid': user.email
+            'email': user.email
         }
 
     @staticmethod
     def current_user_payload(user):
         return {
-            'uid': user.email,
             'name': user.name,
             'email': user.email,
             'role': user.role,

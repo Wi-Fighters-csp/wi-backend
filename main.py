@@ -416,6 +416,24 @@ def reject_pso_admin_member_request(request_id):
 
     return jsonify({'message': 'Request rejected successfully.', 'request': rejected_request}), status_code
 
+
+@app.route('/pso/admin/member-requests/<int:request_id>', methods=['GET'])
+@login_required
+def pso_admin_member_request_detail(request_id):
+    admin_error = require_site_admin()
+    if admin_error:
+        return admin_error
+
+    actor, actor_error = require_pso_admin_actor()
+    if actor_error:
+        return actor_error
+
+    detail, error_body, status_code = PSOAuthService.get_admin_member_request_detail(request_id)
+    if error_body:
+        return jsonify(error_body), status_code
+
+    return jsonify(detail)
+
 @app.route('/pso/member-cards/<int:card_id>', methods=['PUT'])
 @login_required
 def update_pso_member_card(card_id):

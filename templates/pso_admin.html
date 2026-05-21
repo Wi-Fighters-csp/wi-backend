@@ -115,6 +115,7 @@
                     <div class="request-actions">
                         <button
                             class="btn btn-primary btn-sm open-request-review"
+                            type="button"
                             data-request-id="{{ request_row.id }}"
                         >
                             View Full Request
@@ -567,11 +568,13 @@
     const userRecords = {{ users|tojson }};
     const memberRecords = {{ members|tojson }};
     const cardRecords = {{ member_cards|tojson }};
+    const pendingRequestRecords = {{ pending_requests|tojson }};
     const canManagePso = {{ can_manage_pso|tojson }};
 
     const userMap = new Map(userRecords.map((record) => [record.uid, record]));
     const memberMap = new Map(memberRecords.map((record) => [record.uid, record]));
     const cardMap = new Map(cardRecords.map((record) => [String(record.id), record]));
+    const pendingRequestMap = new Map(pendingRequestRecords.map((record) => [String(record.id), record]));
 
     const userModal = new bootstrap.Modal(document.getElementById('userModal'));
     const memberModal = new bootstrap.Modal(document.getElementById('memberModal'));
@@ -618,14 +621,22 @@
         });
 
         const contentType = response.headers.get('content-type') || '';
-        let data = {};
 
-        if (contentType.includes('application/json')) {
-            data = await response.json();
-        } else {
-            const text = await response.text();
-            data = { message: text };
+        // If auth middleware redirected to login, avoid showing raw HTML in alerts.
+        if (response.redirected && response.url.includes('/login')) {
+            throw new Error('Your backend admin session expired. Please log in again and reopen this page.');
         }
+
+        if (!contentType.includes('application/json')) {
+            const text = await response.text();
+            const looksLikeHtml = /<\s*html|<\s*!doctype\s+html/i.test(text);
+            if (looksLikeHtml) {
+                throw new Error('Unable to load request details from backend. Please refresh and sign in to backend admin again.');
+            }
+            throw new Error('Unexpected response from server. Please refresh and try again.');
+        }
+
+        const data = await response.json();
 
         if (!response.ok) {
             throw new Error(data.message || data.error || `Request failed with status ${response.status}`);
@@ -657,7 +668,7 @@
             return;
         }
 
-        const endpoint = `/api/pso/admin/member-requests/${encodeURIComponent(requestId)}/${action}`;
+        const endpoint = `/pso/admin/member-requests/${encodeURIComponent(requestId)}/${action}`;
 
         try {
             const result = await sendJson(endpoint, 'POST');
@@ -677,37 +688,36 @@
     });
 
     document.querySelectorAll('.open-request-review').forEach((button) => {
-        button.addEventListener('click', async () => {
+        button.addEventListener('click', () => {
             const requestId = button.dataset.requestId;
             if (!requestId) {
                 return;
             }
 
-            try {
-                const detail = await sendJson(`/api/pso/admin/member-requests/${encodeURIComponent(requestId)}`, 'GET');
-                const requestData = detail.request || {};
-
-                document.getElementById('reviewRequestId').value = requestId;
-                setReviewValue('reviewName', requestData.name);
-                setReviewValue('reviewUid', requestData.uid);
-                setReviewValue('reviewEmail', requestData.email);
-                setReviewValue('reviewInstrument', requestData.instrument);
-                setReviewValue('reviewSection', requestData.section);
-                setReviewValue('reviewStatus', requestData.status);
-                setReviewValue('reviewSubmittedAt', requestData.submitted_at);
-                setReviewValue('reviewReviewedAt', requestData.reviewed_at, 'Not reviewed');
-                setReviewValue('reviewPhone', requestData.phone, '--');
-                setReviewValue('reviewExperience', requestData.experience, '--');
-                setReviewValue('reviewBackground', requestData.background, '--');
-                setReviewValue('reviewPiece', requestData.piece, '--');
-                setReviewValue('reviewAvailability', requestData.availability, '--');
-                setReviewValue('reviewVideoFile', requestData.video_file, 'None uploaded');
-                setReviewValue('reviewVideoLink', requestData.video_link, 'None provided');
-
-                requestReviewModal.show();
-            } catch (error) {
-                window.alert(error.message);
+            const requestData = pendingRequestMap.get(String(requestId));
+            if (!requestData) {
+                window.alert('Unable to locate request details in this view. Please refresh the dashboard.');
+                return;
             }
+
+            document.getElementById('reviewRequestId').value = requestId;
+            setReviewValue('reviewName', requestData.name);
+            setReviewValue('reviewUid', requestData.uid);
+            setReviewValue('reviewEmail', requestData.email);
+            setReviewValue('reviewInstrument', requestData.instrument);
+            setReviewValue('reviewSection', requestData.section);
+            setReviewValue('reviewStatus', requestData.status);
+            setReviewValue('reviewSubmittedAt', requestData.submitted_at);
+            setReviewValue('reviewReviewedAt', requestData.reviewed_at, 'Not reviewed');
+            setReviewValue('reviewPhone', requestData.phone, '--');
+            setReviewValue('reviewExperience', requestData.experience, '--');
+            setReviewValue('reviewBackground', requestData.background, '--');
+            setReviewValue('reviewPiece', requestData.piece, '--');
+            setReviewValue('reviewAvailability', requestData.availability, '--');
+            setReviewValue('reviewVideoFile', requestData.video_file, 'None uploaded');
+            setReviewValue('reviewVideoLink', requestData.video_link, 'None provided');
+
+            requestReviewModal.show();
         });
     });
 

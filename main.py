@@ -200,6 +200,7 @@ def build_pso_admin_dashboard_context():
     members = PSOAuthService.list_members()
     member_cards = PSOAuthService.list_member_cards()
     leaderboard = PSOAuthService.list_progression_leaderboard(limit=25)
+    admin_chat_threads = PSOAuthService.list_chat_threads_for_admin()
 
     request_counts = {
         'total': len(request_history),
@@ -226,6 +227,7 @@ def build_pso_admin_dashboard_context():
         'members': members,
         'member_cards': member_cards,
         'leaderboard': leaderboard,
+        'admin_chat_threads': admin_chat_threads,
         'request_counts': request_counts,
         'dashboard_stats': {
             'user_count': len(users),
@@ -234,6 +236,7 @@ def build_pso_admin_dashboard_context():
             'member_card_count': len(member_cards),
             'pending_request_count': len(pending_requests),
             'leaderboard_count': len(leaderboard),
+            'chat_thread_count': len(admin_chat_threads),
         },
     }
 
@@ -433,6 +436,67 @@ def pso_admin_member_request_detail(request_id):
         return jsonify(error_body), status_code
 
     return jsonify(detail)
+
+
+@app.route('/pso/admin/chat/threads', methods=['GET'])
+@login_required
+def pso_admin_chat_threads():
+    admin_error = require_site_admin()
+    if admin_error:
+        return admin_error
+
+    actor, actor_error = require_pso_admin_actor()
+    if actor_error:
+        return actor_error
+
+    return jsonify({'threads': PSOAuthService.list_chat_threads_for_admin()})
+
+
+@app.route('/pso/admin/chat/thread', methods=['GET'])
+@login_required
+def pso_admin_chat_thread():
+    admin_error = require_site_admin()
+    if admin_error:
+        return admin_error
+
+    actor, actor_error = require_pso_admin_actor()
+    if actor_error:
+        return actor_error
+
+    thread_uid = request.args.get('uid') or request.args.get('thread_uid')
+    thread, error_body, status_code = PSOAuthService.get_chat_thread_for_user(actor, thread_uid=thread_uid)
+    if error_body:
+        return jsonify(error_body), status_code
+
+    return jsonify(thread)
+
+
+@app.route('/pso/admin/chat/messages', methods=['POST'])
+@login_required
+def pso_admin_chat_messages():
+    admin_error = require_site_admin()
+    if admin_error:
+        return admin_error
+
+    actor, actor_error = require_pso_admin_actor()
+    if actor_error:
+        return actor_error
+
+    body = request.get_json() or {}
+    thread_uid = body.get('uid') or body.get('thread_uid')
+    text = body.get('text')
+
+    message, error_body, status_code = PSOAuthService.send_chat_message(
+        thread_uid=thread_uid,
+        sender_user=actor,
+        text=text,
+    )
+    if error_body:
+        return jsonify(error_body), status_code
+
+    response = jsonify({'message': 'Chat message sent.', 'chat_message': message})
+    response.status_code = status_code
+    return response
 
 @app.route('/pso/member-cards/<int:card_id>', methods=['PUT'])
 @login_required

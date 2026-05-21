@@ -235,7 +235,10 @@ class PSOAPI:
             if error_body:
                 return error_body, status_code
 
-            progression = PSOAuthService.save_progression(current_user.uid, request.get_json() or {})
+            progression, error_body, status_code = PSOAuthService.save_progression(current_user.uid, request.get_json() or {})
+            if error_body:
+                return error_body, status_code
+
             return jsonify(progression)
 
     class _MemberCards(Resource):

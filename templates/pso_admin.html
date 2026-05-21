@@ -9,20 +9,32 @@
             <p class="hero-copy">
                 Manage orchestra operations from one page: requests, roster, users, cards, and progression.
             </p>
-            <div class="identity-chips">
-                <span class="identity-chip">{{ access.name }}</span>
-                <span class="identity-chip">{{ access.uid }}</span>
-                <span class="identity-chip">{{ access.email }}</span>
-                <span class="identity-chip">Site role: {{ access.role }}</span>
-                <span class="identity-chip">PSO role: {{ access.pso_role or 'not synced' }}</span>
-            </div>
         </div>
-        <div class="hero-actions">
-            <button class="hero-link dashboard-toggle" type="button" data-dashboard-view="requests">Requests</button>
-            <button class="hero-link dashboard-toggle" type="button" data-dashboard-view="members">Members</button>
-            <button class="hero-link dashboard-toggle" type="button" data-dashboard-view="users">Users</button>
-            <button class="hero-link dashboard-toggle" type="button" data-dashboard-view="cards">Cards</button>
-            <button class="hero-link dashboard-toggle" type="button" data-dashboard-view="leaderboard">Leaderboard</button>
+        <div class="hero-actions" role="tablist" aria-label="Dashboard views">
+            <button class="hero-link dashboard-toggle" type="button" data-dashboard-view="requests">
+                <span class="hero-link-title">Requests</span>
+                <span class="hero-link-meta">{{ dashboard_stats.pending_request_count }} pending</span>
+            </button>
+            <button class="hero-link dashboard-toggle" type="button" data-dashboard-view="members">
+                <span class="hero-link-title">Members</span>
+                <span class="hero-link-meta">{{ dashboard_stats.member_count }} total</span>
+            </button>
+            <button class="hero-link dashboard-toggle" type="button" data-dashboard-view="users">
+                <span class="hero-link-title">Users</span>
+                <span class="hero-link-meta">{{ dashboard_stats.user_count }} accounts</span>
+            </button>
+            <button class="hero-link dashboard-toggle" type="button" data-dashboard-view="cards">
+                <span class="hero-link-title">Cards</span>
+                <span class="hero-link-meta">{{ dashboard_stats.member_card_count }} created</span>
+            </button>
+            <button class="hero-link dashboard-toggle" type="button" data-dashboard-view="leaderboard">
+                <span class="hero-link-title">Leaderboard</span>
+                <span class="hero-link-meta">{{ dashboard_stats.leaderboard_count }} ranked</span>
+            </button>
+            <button class="hero-link dashboard-toggle" type="button" data-dashboard-view="chat">
+                <span class="hero-link-title">Chat</span>
+                <span class="hero-link-meta">{{ dashboard_stats.chat_thread_count }} threads</span>
+            </button>
         </div>
     </section>
 
@@ -313,6 +325,59 @@
         </div>
     </section>
 
+    <section class="themed-panel section-panel dashboard-panel-view" id="chat-panel" data-view-group="chat" hidden>
+        <div class="section-heading-row">
+            <div>
+                <p class="eyebrow">Member Communication</p>
+                <h2>Admin Chat Inbox</h2>
+            </div>
+            <div class="action-row">
+                <span class="section-badge" id="adminChatThreadCount">{{ admin_chat_threads|length }}</span>
+                <button class="btn btn-outline-light btn-sm" type="button" id="refreshAdminChatsBtn">Refresh</button>
+            </div>
+        </div>
+
+        <div class="admin-chat-layout">
+            <aside class="admin-chat-thread-list" id="adminChatThreadList" aria-label="Chat threads">
+                {% for thread in admin_chat_threads %}
+                <button class="chat-thread-item" type="button" data-thread-uid="{{ thread.uid }}">
+                    <div class="chat-thread-head">
+                        <strong>{{ thread.name or thread.uid }}</strong>
+                        <span class="soft-pill">{{ thread.request_status or 'unknown' }}</span>
+                    </div>
+                    <p>{{ thread.uid }} · {{ thread.email }}</p>
+                    <p class="chat-thread-preview">{{ thread.latest_text or 'No messages yet.' }}</p>
+                </button>
+                {% else %}
+                <div class="empty-state" id="adminChatEmptyState">No chat threads yet.</div>
+                {% endfor %}
+            </aside>
+
+            <section class="admin-chat-thread-panel" aria-live="polite">
+                <div class="admin-chat-thread-header">
+                    <div>
+                        <h3 id="adminChatTitle">Select a conversation</h3>
+                        <p id="adminChatMeta">Choose a person from the inbox to view and reply.</p>
+                    </div>
+                </div>
+
+                <div class="admin-chat-messages" id="adminChatMessages">
+                    <div class="empty-state">No thread selected.</div>
+                </div>
+
+                <form class="admin-chat-compose" id="adminChatForm">
+                    <label class="full-width" for="adminChatInput">
+                        <span>Reply as admin</span>
+                        <textarea id="adminChatInput" class="form-control" rows="3" maxlength="4000" placeholder="Type your message" required></textarea>
+                    </label>
+                    <div class="action-row">
+                        <button class="btn btn-primary" type="submit" id="adminChatSendBtn">Send message</button>
+                    </div>
+                </form>
+            </section>
+        </div>
+    </section>
+
     <section class="themed-panel section-panel dashboard-panel-view" id="leaderboard-panel" data-view-group="leaderboard" hidden>
         <div class="section-heading-row">
             <div>
@@ -570,11 +635,14 @@
     const cardRecords = {{ member_cards|tojson }};
     const pendingRequestRecords = {{ pending_requests|tojson }};
     const canManagePso = {{ can_manage_pso|tojson }};
+    const initialAdminChatThreads = {{ admin_chat_threads|tojson }};
 
     const userMap = new Map(userRecords.map((record) => [record.uid, record]));
     const memberMap = new Map(memberRecords.map((record) => [record.uid, record]));
     const cardMap = new Map(cardRecords.map((record) => [String(record.id), record]));
     const pendingRequestMap = new Map(pendingRequestRecords.map((record) => [String(record.id), record]));
+    let adminChatThreads = Array.isArray(initialAdminChatThreads) ? [...initialAdminChatThreads] : [];
+    let selectedAdminThreadUid = null;
 
     const userModal = new bootstrap.Modal(document.getElementById('userModal'));
     const memberModal = new bootstrap.Modal(document.getElementById('memberModal'));
@@ -583,6 +651,14 @@
     const dashboardViews = Array.from(document.querySelectorAll('.dashboard-panel-view'));
     const dashboardButtons = Array.from(document.querySelectorAll('.dashboard-toggle'));
     const dashboardPlaceholder = document.getElementById('dashboard-placeholder');
+    const adminChatThreadList = document.getElementById('adminChatThreadList');
+    const adminChatMessages = document.getElementById('adminChatMessages');
+    const adminChatTitle = document.getElementById('adminChatTitle');
+    const adminChatMeta = document.getElementById('adminChatMeta');
+    const adminChatInput = document.getElementById('adminChatInput');
+    const adminChatForm = document.getElementById('adminChatForm');
+    const adminChatThreadCount = document.getElementById('adminChatThreadCount');
+    const refreshAdminChatsBtn = document.getElementById('refreshAdminChatsBtn');
 
     function setDashboardView(selectedView) {
         dashboardViews.forEach((panel) => {
@@ -601,6 +677,10 @@
         if (activePanel) {
             activePanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
+
+        if (selectedView === 'chat') {
+            initializeAdminChatView();
+        }
     }
 
     dashboardButtons.forEach((button) => {
@@ -608,6 +688,223 @@
             setDashboardView(button.dataset.dashboardView);
         });
     });
+
+    function formatTimestamp(value) {
+        if (!value) {
+            return 'Unknown time';
+        }
+
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) {
+            return String(value);
+        }
+
+        return parsed.toLocaleString();
+    }
+
+    function setChatComposeEnabled(isEnabled) {
+        if (!adminChatInput) {
+            return;
+        }
+        adminChatInput.disabled = !isEnabled;
+        const sendButton = document.getElementById('adminChatSendBtn');
+        if (sendButton) {
+            sendButton.disabled = !isEnabled;
+        }
+    }
+
+    function renderThreadButton(thread) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'chat-thread-item';
+        button.dataset.threadUid = thread.uid;
+        button.classList.toggle('is-active', thread.uid === selectedAdminThreadUid);
+
+        const head = document.createElement('div');
+        head.className = 'chat-thread-head';
+
+        const title = document.createElement('strong');
+        title.textContent = thread.name || thread.uid;
+        head.appendChild(title);
+
+        const status = document.createElement('span');
+        status.className = 'soft-pill';
+        status.textContent = thread.request_status || 'unknown';
+        head.appendChild(status);
+
+        const meta = document.createElement('p');
+        meta.textContent = `${thread.uid} · ${thread.email || 'no email'}`;
+
+        const preview = document.createElement('p');
+        preview.className = 'chat-thread-preview';
+        preview.textContent = thread.latest_text || 'No messages yet.';
+
+        button.appendChild(head);
+        button.appendChild(meta);
+        button.appendChild(preview);
+
+        button.addEventListener('click', async () => {
+            await selectAdminThread(thread.uid);
+        });
+
+        return button;
+    }
+
+    function renderAdminChatThreadList() {
+        if (!adminChatThreadList) {
+            return;
+        }
+
+        adminChatThreadList.innerHTML = '';
+
+        if (!adminChatThreads.length) {
+            const empty = document.createElement('div');
+            empty.className = 'empty-state';
+            empty.textContent = 'No chat threads yet.';
+            adminChatThreadList.appendChild(empty);
+        } else {
+            adminChatThreads.forEach((thread) => {
+                adminChatThreadList.appendChild(renderThreadButton(thread));
+            });
+        }
+
+        if (adminChatThreadCount) {
+            adminChatThreadCount.textContent = String(adminChatThreads.length);
+        }
+    }
+
+    function renderAdminThreadMessages(messages, actorUid) {
+        if (!adminChatMessages) {
+            return;
+        }
+
+        adminChatMessages.innerHTML = '';
+
+        if (!Array.isArray(messages) || !messages.length) {
+            const empty = document.createElement('div');
+            empty.className = 'empty-state';
+            empty.textContent = 'No messages in this thread yet.';
+            adminChatMessages.appendChild(empty);
+            return;
+        }
+
+        messages.forEach((message) => {
+            const row = document.createElement('article');
+            const fromAdmin = String(message.sender_uid) === String(actorUid);
+            row.className = `chat-message ${fromAdmin ? 'from-admin' : 'from-user'}`;
+
+            const meta = document.createElement('header');
+            meta.className = 'chat-message-meta';
+            meta.textContent = `${message.sender_name || message.sender_uid} · ${formatTimestamp(message.created_at)}`;
+
+            const body = document.createElement('p');
+            body.className = 'chat-message-text';
+            body.textContent = message.text || '';
+
+            row.appendChild(meta);
+            row.appendChild(body);
+            adminChatMessages.appendChild(row);
+        });
+
+        adminChatMessages.scrollTop = adminChatMessages.scrollHeight;
+    }
+
+    async function fetchAdminThreads() {
+        const result = await sendJson('/pso/admin/chat/threads', 'GET');
+        adminChatThreads = Array.isArray(result.threads) ? result.threads : [];
+        renderAdminChatThreadList();
+    }
+
+    async function selectAdminThread(threadUid) {
+        if (!threadUid) {
+            return;
+        }
+
+        selectedAdminThreadUid = String(threadUid);
+        renderAdminChatThreadList();
+        setChatComposeEnabled(false);
+
+        const thread = await sendJson(`/pso/admin/chat/thread?uid=${encodeURIComponent(selectedAdminThreadUid)}`, 'GET');
+
+        if (adminChatTitle) {
+            adminChatTitle.textContent = thread.name || thread.uid || 'Conversation';
+        }
+        if (adminChatMeta) {
+            const status = thread.request?.status ? `Request: ${thread.request.status}` : 'No request status';
+            adminChatMeta.textContent = `${thread.uid} · ${thread.email || 'no email'} · ${status}`;
+        }
+
+        renderAdminThreadMessages(thread.messages, {{ access.uid|tojson }});
+        setChatComposeEnabled(true);
+    }
+
+    async function initializeAdminChatView() {
+        try {
+            if (!adminChatThreads.length) {
+                await fetchAdminThreads();
+            } else {
+                renderAdminChatThreadList();
+            }
+
+            if (!selectedAdminThreadUid && adminChatThreads.length) {
+                await selectAdminThread(adminChatThreads[0].uid);
+            }
+        } catch (error) {
+            window.alert(error.message || 'Unable to load admin chat right now.');
+        }
+    }
+
+    if (refreshAdminChatsBtn) {
+        refreshAdminChatsBtn.addEventListener('click', async () => {
+            try {
+                await fetchAdminThreads();
+                if (selectedAdminThreadUid) {
+                    await selectAdminThread(selectedAdminThreadUid);
+                } else if (adminChatThreads.length) {
+                    await selectAdminThread(adminChatThreads[0].uid);
+                }
+            } catch (error) {
+                window.alert(error.message || 'Unable to refresh chats.');
+            }
+        });
+    }
+
+    if (adminChatForm) {
+        adminChatForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const text = String(adminChatInput?.value || '').trim();
+            if (!selectedAdminThreadUid) {
+                window.alert('Select a conversation first.');
+                return;
+            }
+            if (!text) {
+                return;
+            }
+
+            try {
+                setChatComposeEnabled(false);
+                await sendJson('/pso/admin/chat/messages', 'POST', {
+                    uid: selectedAdminThreadUid,
+                    text,
+                });
+                if (adminChatInput) {
+                    adminChatInput.value = '';
+                }
+
+                await fetchAdminThreads();
+                await selectAdminThread(selectedAdminThreadUid);
+            } catch (error) {
+                window.alert(error.message || 'Unable to send message.');
+                setChatComposeEnabled(true);
+            }
+        });
+    }
+
+    const urlView = new URLSearchParams(window.location.search).get('view');
+    if (urlView && dashboardButtons.some((button) => button.dataset.dashboardView === urlView)) {
+        setDashboardView(urlView);
+    }
 
     async function sendJson(url, method, payload) {
         const response = await fetch(url, {
@@ -907,17 +1204,14 @@
         margin-bottom: 1.15rem;
     }
 
-    .identity-chips,
     .filter-pills,
     .request-meta,
-    .hero-actions,
     .action-row {
         display: flex;
         flex-wrap: wrap;
         gap: 0.65rem;
     }
 
-    .identity-chip,
     .soft-pill,
     .hero-link,
     .rank-pill {
@@ -933,6 +1227,13 @@
         font-size: 0.92rem;
     }
 
+    .hero-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.7rem;
+        align-content: start;
+    }
+
     .hero-link {
         background: rgba(62, 39, 35, 0.92);
         color: var(--pso-cream);
@@ -941,6 +1242,26 @@
         border-width: 1px;
         border-style: solid;
         cursor: pointer;
+        width: 100%;
+        justify-content: flex-start;
+        text-align: left;
+        border-radius: 16px;
+        padding: 0.7rem 0.85rem;
+        display: grid;
+        gap: 0.15rem;
+    }
+
+    .hero-link-title {
+        font-weight: 700;
+        font-size: 0.95rem;
+        line-height: 1.2;
+    }
+
+    .hero-link-meta {
+        font-size: 0.8rem;
+        opacity: 0.85;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
     }
 
     .hero-link:hover {
@@ -1382,6 +1703,123 @@
         font-weight: 600;
     }
 
+    .admin-chat-layout {
+        display: grid;
+        grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+        gap: 1rem;
+        min-height: 30rem;
+    }
+
+    .admin-chat-thread-list {
+        display: grid;
+        gap: 0.65rem;
+        align-content: start;
+        max-height: 65vh;
+        overflow-y: auto;
+        padding-right: 0.35rem;
+    }
+
+    .chat-thread-item {
+        width: 100%;
+        text-align: left;
+        border-radius: 16px;
+        border: 1px solid rgba(250, 243, 224, 0.14);
+        background: rgba(250, 243, 224, 0.05);
+        color: var(--pso-cream);
+        padding: 0.8rem;
+        display: grid;
+        gap: 0.4rem;
+    }
+
+    .chat-thread-item.is-active {
+        border-color: rgba(242, 166, 160, 0.72);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        background: rgba(242, 166, 160, 0.12);
+    }
+
+    .chat-thread-item p {
+        margin: 0;
+        font-size: 0.9rem;
+        opacity: 0.92;
+    }
+
+    .chat-thread-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.6rem;
+    }
+
+    .chat-thread-preview {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .admin-chat-thread-panel {
+        display: grid;
+        gap: 0.8rem;
+        grid-template-rows: auto minmax(16rem, 1fr) auto;
+    }
+
+    .admin-chat-thread-header h3 {
+        margin: 0;
+    }
+
+    .admin-chat-thread-header p {
+        margin: 0.35rem 0 0;
+        opacity: 0.85;
+    }
+
+    .admin-chat-messages {
+        border: 1px solid rgba(250, 243, 224, 0.14);
+        border-radius: 16px;
+        background: rgba(250, 243, 224, 0.05);
+        padding: 0.85rem;
+        overflow-y: auto;
+        display: grid;
+        gap: 0.6rem;
+        max-height: 65vh;
+    }
+
+    .chat-message {
+        max-width: min(90%, 42rem);
+        border-radius: 14px;
+        padding: 0.65rem 0.8rem;
+        display: grid;
+        gap: 0.35rem;
+    }
+
+    .chat-message.from-admin {
+        justify-self: end;
+        background: rgba(217, 119, 6, 0.18);
+        border: 1px solid rgba(217, 119, 6, 0.32);
+    }
+
+    .chat-message.from-user {
+        justify-self: start;
+        background: rgba(250, 243, 224, 0.1);
+        border: 1px solid rgba(250, 243, 224, 0.2);
+    }
+
+    .chat-message-meta {
+        font-size: 0.76rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        opacity: 0.8;
+    }
+
+    .chat-message-text {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    .admin-chat-compose {
+        display: grid;
+        gap: 0.65rem;
+    }
+
     .full-width {
         grid-column: 1 / -1;
     }
@@ -1396,6 +1834,10 @@
         .admin-hero {
             grid-template-columns: 1fr;
         }
+
+        .hero-actions {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
     }
 
     @media (max-width: 720px) {
@@ -1404,6 +1846,14 @@
         .two-column-form,
         .request-review-grid {
             grid-template-columns: 1fr;
+        }
+
+        .admin-chat-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .hero-actions {
+            grid-template-columns: 1fr 1fr;
         }
 
         .page-shell.pso-admin-shell {

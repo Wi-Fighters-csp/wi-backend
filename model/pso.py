@@ -38,6 +38,8 @@ class PSOUser:
 
 
 class PSOAuthService:
+    PROGRESSION_SCHEMA_VERSION = 2
+
     @staticmethod
     def database_path():
         volumes_dir = os.path.join(app.instance_path, 'volumes')
@@ -124,18 +126,194 @@ class PSOAuthService:
         return normalized
 
     @staticmethod
+    def progression_default_metrics():
+        return {
+            'uniquePages': [],
+            'researchPages': [],
+            'instrumentSearches': 0,
+            'uniqueRecordingKeys': [],
+            'recordingPlays': 0,
+            'uniqueMusicianCards': [],
+            'viewedConcertCalendar': 0,
+            'viewedTicketsSection': 0,
+            'gamesPlayed': 0,
+            'uniqueGames': [],
+        }
+
+    @staticmethod
+    def progression_default_state(last_updated_at=None):
+        return {
+            'schemaVersion': PSOAuthService.PROGRESSION_SCHEMA_VERSION,
+            'xp': 0,
+            'completedQuests': [],
+            'metrics': PSOAuthService.progression_default_metrics(),
+            'lastUpdatedAt': last_updated_at or PSOAuthService.progression_timestamp(),
+        }
+
+    @staticmethod
+    def normalize_progression_metric_string_list(value, field_name):
+        if not isinstance(value, list):
+            return None, {'message': f'metrics.{field_name} must be an array of strings'}, 400
+
+        normalized = []
+        seen = set()
+        for entry in value:
+            if not isinstance(entry, str):
+                return None, {'message': f'metrics.{field_name} must contain only strings'}, 400
+            cleaned = entry.strip()
+            if not cleaned or cleaned in seen:
+                continue
+            seen.add(cleaned)
+            normalized.append(cleaned)
+
+        return normalized, None, None
+
+    @staticmethod
+    def normalize_progression_metric_counter(value, field_name, clamp_to_binary=False):
+        if isinstance(value, bool):
+            normalized = int(value)
+        elif isinstance(value, (int, float)):
+            if int(value) != value:
+                return None, {'message': f'metrics.{field_name} must be an integer value'}, 400
+            normalized = int(value)
+        else:
+            return None, {'message': f'metrics.{field_name} must be a number'}, 400
+
+        if normalized < 0:
+            return None, {'message': f'metrics.{field_name} must be greater than or equal to 0'}, 400
+
+        if clamp_to_binary:
+            normalized = 1 if normalized > 0 else 0
+
+        return normalized, None, None
+
+    @staticmethod
+    def normalize_progression_payload_v2(body):
+        payload = body.get('progression') if isinstance(body.get('progression'), dict) else body
+        if not isinstance(payload, dict):
+            return None, {'message': 'Progression payload is required'}, 400
+
+        schema_version = payload.get('schemaVersion')
+        if schema_version != PSOAuthService.PROGRESSION_SCHEMA_VERSION:
+            return None, {'message': f'schemaVersion must be {PSOAuthService.PROGRESSION_SCHEMA_VERSION}'}, 400
+
+        xp_value = payload.get('xp')
+        if isinstance(xp_value, bool) or not isinstance(xp_value, (int, float)):
+            return None, {'message': 'xp must be a number greater than or equal to 0'}, 400
+        if int(xp_value) != xp_value:
+            return None, {'message': 'xp must be an integer value'}, 400
+        normalized_xp = int(xp_value)
+        if normalized_xp < 0:
+            return None, {'message': 'xp must be greater than or equal to 0'}, 400
+
+        completed_quests = payload.get('completedQuests')
+        if not isinstance(completed_quests, list):
+            return None, {'message': 'completedQuests must be an array of strings'}, 400
+        normalized_completed_quests = []
+        completed_seen = set()
+        for entry in completed_quests:
+            if not isinstance(entry, str):
+                return None, {'message': 'completedQuests must contain only strings'}, 400
+            quest_id = entry.strip()
+            if not quest_id or quest_id in completed_seen:
+                continue
+            completed_seen.add(quest_id)
+            normalized_completed_quests.append(quest_id)
+
+        metrics = payload.get('metrics')
+        if not isinstance(metrics, dict):
+            return None, {'message': 'metrics must be an object'}, 400
+
+        normalized_metrics = PSOAuthService.progression_default_metrics()
+
+        normalized_metrics['uniquePages'], error_body, status_code = PSOAuthService.normalize_progression_metric_string_list(
+            metrics.get('uniquePages', []),
+            'uniquePages'
+        )
+        if error_body:
+            return None, error_body, status_code
+
+        normalized_metrics['researchPages'], error_body, status_code = PSOAuthService.normalize_progression_metric_string_list(
+            metrics.get('researchPages', []),
+            'researchPages'
+        )
+        if error_body:
+            return None, error_body, status_code
+
+        normalized_metrics['instrumentSearches'], error_body, status_code = PSOAuthService.normalize_progression_metric_counter(
+            metrics.get('instrumentSearches', 0),
+            'instrumentSearches'
+        )
+        if error_body:
+            return None, error_body, status_code
+
+        normalized_metrics['uniqueRecordingKeys'], error_body, status_code = PSOAuthService.normalize_progression_metric_string_list(
+            metrics.get('uniqueRecordingKeys', []),
+            'uniqueRecordingKeys'
+        )
+        if error_body:
+            return None, error_body, status_code
+
+        normalized_metrics['recordingPlays'], error_body, status_code = PSOAuthService.normalize_progression_metric_counter(
+            metrics.get('recordingPlays', 0),
+            'recordingPlays'
+        )
+        if error_body:
+            return None, error_body, status_code
+
+        normalized_metrics['uniqueMusicianCards'], error_body, status_code = PSOAuthService.normalize_progression_metric_string_list(
+            metrics.get('uniqueMusicianCards', []),
+            'uniqueMusicianCards'
+        )
+        if error_body:
+            return None, error_body, status_code
+
+        normalized_metrics['viewedConcertCalendar'], error_body, status_code = PSOAuthService.normalize_progression_metric_counter(
+            metrics.get('viewedConcertCalendar', 0),
+            'viewedConcertCalendar',
+            clamp_to_binary=True,
+        )
+        if error_body:
+            return None, error_body, status_code
+
+        normalized_metrics['viewedTicketsSection'], error_body, status_code = PSOAuthService.normalize_progression_metric_counter(
+            metrics.get('viewedTicketsSection', 0),
+            'viewedTicketsSection',
+            clamp_to_binary=True,
+        )
+        if error_body:
+            return None, error_body, status_code
+
+        normalized_metrics['gamesPlayed'], error_body, status_code = PSOAuthService.normalize_progression_metric_counter(
+            metrics.get('gamesPlayed', 0),
+            'gamesPlayed'
+        )
+        if error_body:
+            return None, error_body, status_code
+
+        normalized_metrics['uniqueGames'], error_body, status_code = PSOAuthService.normalize_progression_metric_string_list(
+            metrics.get('uniqueGames', []),
+            'uniqueGames'
+        )
+        if error_body:
+            return None, error_body, status_code
+
+        return {
+            'schemaVersion': PSOAuthService.PROGRESSION_SCHEMA_VERSION,
+            'xp': normalized_xp,
+            'completedQuests': normalized_completed_quests,
+            'metrics': normalized_metrics,
+            'lastUpdatedAt': PSOAuthService.progression_timestamp(),
+        }, None, None
+
+    @staticmethod
     def progression_timestamp():
         return datetime.now(timezone.utc).isoformat()
 
     @staticmethod
     def progression_payload(record=None):
         if record is None:
-            return {
-                'xp': 0,
-                'completedQuests': [],
-                'metrics': {},
-                'lastUpdatedAt': None,
-            }
+            return PSOAuthService.progression_default_state()
 
         try:
             completed_quests = json.loads(record['completed_quests'] or '[]')
@@ -147,11 +325,18 @@ class PSOAuthService:
         except (TypeError, ValueError, json.JSONDecodeError):
             metrics = {}
 
+        if int(record['schema_version'] or 0) != PSOAuthService.PROGRESSION_SCHEMA_VERSION:
+            return PSOAuthService.progression_default_state()
+
         return {
+            'schemaVersion': PSOAuthService.PROGRESSION_SCHEMA_VERSION,
             'xp': PSOAuthService.normalize_progression_xp(record['xp']),
             'completedQuests': PSOAuthService.normalize_completed_quests(completed_quests),
-            'metrics': PSOAuthService.normalize_progression_metrics(metrics),
-            'lastUpdatedAt': record['last_updated_at'],
+            'metrics': {
+                **PSOAuthService.progression_default_metrics(),
+                **PSOAuthService.normalize_progression_metrics(metrics),
+            },
+            'lastUpdatedAt': record['last_updated_at'] or PSOAuthService.progression_timestamp(),
         }
 
     @staticmethod
@@ -333,6 +518,7 @@ class PSOAuthService:
                 '''
                 CREATE TABLE IF NOT EXISTS user_progression (
                     uid TEXT PRIMARY KEY,
+                    schema_version INTEGER NOT NULL DEFAULT 2,
                     xp INTEGER NOT NULL DEFAULT 0,
                     completed_quests TEXT NOT NULL DEFAULT '[]',
                     metrics TEXT NOT NULL DEFAULT '{}',
@@ -340,6 +526,32 @@ class PSOAuthService:
                     FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
                 )
                 '''
+            )
+            progression_columns = {
+                column['name'] for column in connection.execute('PRAGMA table_info(user_progression)').fetchall()
+            }
+            if 'schema_version' not in progression_columns:
+                connection.execute(
+                    'ALTER TABLE user_progression ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 2'
+                )
+
+            # One-time migration reset for pre-v2 progression rows.
+            connection.execute(
+                '''
+                UPDATE user_progression
+                SET schema_version = ?,
+                    xp = 0,
+                    completed_quests = '[]',
+                    metrics = ?,
+                    last_updated_at = ?
+                WHERE schema_version IS NULL OR schema_version != ?
+                ''',
+                (
+                    PSOAuthService.PROGRESSION_SCHEMA_VERSION,
+                    json.dumps(PSOAuthService.progression_default_metrics()),
+                    PSOAuthService.progression_timestamp(),
+                    PSOAuthService.PROGRESSION_SCHEMA_VERSION,
+                )
             )
 
             # NEW: shared chat table for all devices/computers
@@ -922,6 +1134,93 @@ class PSOAuthService:
             'section': str(member.get('section') or '').strip(),
             'practice_time': PSOAuthService.normalize_practice_time(member.get('practice_time')) or 0,
         }
+
+    @staticmethod
+    def get_progression(uid):
+        PSOAuthService.ensure_database()
+
+        with PSOAuthService.get_connection() as connection:
+            record = connection.execute(
+                '''
+                SELECT uid, schema_version, xp, completed_quests, metrics, last_updated_at
+                FROM user_progression
+                WHERE uid = ?
+                ''',
+                (uid,)
+            ).fetchone()
+
+            if record is None:
+                default_state = PSOAuthService.progression_default_state()
+                connection.execute(
+                    '''
+                    INSERT INTO user_progression (uid, schema_version, xp, completed_quests, metrics, last_updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ''',
+                    (
+                        uid,
+                        default_state['schemaVersion'],
+                        default_state['xp'],
+                        json.dumps(default_state['completedQuests']),
+                        json.dumps(default_state['metrics']),
+                        default_state['lastUpdatedAt'],
+                    )
+                )
+                connection.commit()
+                return default_state
+
+            if int(record['schema_version'] or 0) != PSOAuthService.PROGRESSION_SCHEMA_VERSION:
+                default_state = PSOAuthService.progression_default_state()
+                connection.execute(
+                    '''
+                    UPDATE user_progression
+                    SET schema_version = ?, xp = ?, completed_quests = ?, metrics = ?, last_updated_at = ?
+                    WHERE uid = ?
+                    ''',
+                    (
+                        default_state['schemaVersion'],
+                        default_state['xp'],
+                        json.dumps(default_state['completedQuests']),
+                        json.dumps(default_state['metrics']),
+                        default_state['lastUpdatedAt'],
+                        uid,
+                    )
+                )
+                connection.commit()
+                return default_state
+
+        return PSOAuthService.progression_payload(record)
+
+    @staticmethod
+    def save_progression(uid, body):
+        normalized_payload, error_body, status_code = PSOAuthService.normalize_progression_payload_v2(body)
+        if error_body:
+            return None, error_body, status_code
+
+        PSOAuthService.ensure_database()
+        with PSOAuthService.get_connection() as connection:
+            connection.execute(
+                '''
+                INSERT INTO user_progression (uid, schema_version, xp, completed_quests, metrics, last_updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(uid) DO UPDATE SET
+                    schema_version = excluded.schema_version,
+                    xp = excluded.xp,
+                    completed_quests = excluded.completed_quests,
+                    metrics = excluded.metrics,
+                    last_updated_at = excluded.last_updated_at
+                ''',
+                (
+                    uid,
+                    normalized_payload['schemaVersion'],
+                    normalized_payload['xp'],
+                    json.dumps(normalized_payload['completedQuests']),
+                    json.dumps(normalized_payload['metrics']),
+                    normalized_payload['lastUpdatedAt'],
+                )
+            )
+            connection.commit()
+
+        return normalized_payload, None, 200
 
     @staticmethod
     def submit_member_request(

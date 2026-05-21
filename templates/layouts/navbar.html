@@ -37,6 +37,9 @@ This HTML is setup as a fragment allowing it to be "included" by other HTML file
                             <li><a class="dropdown-item" href={{ url_for('pso_users') }}>Users</a></li>
                             <li><a class="dropdown-item" href={{ url_for('pso_members') }}>Members</a></li>
                             <li><a class="dropdown-item" href={{ url_for('pso_member_cards') }}>Created Member Cards</a></li>
+                            {% if current_user.is_authenticated and current_user.role == 'Admin' %}
+                            <li><a class="dropdown-item" href="/pso/admin?view=chat">Admin Chat</a></li>
+                            {% endif %}
                         </ul>
                     </div>
                 </div>
@@ -66,6 +69,7 @@ This HTML is setup as a fragment allowing it to be "included" by other HTML file
                             {% if current_user.role == 'Admin' %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="/pso/admin">PSO Admin Dashboard</a></li>
+                            <li><a class="dropdown-item" href="/pso/admin?view=chat">PSO Admin Chat</a></li>
                             {% endif %}
                             <li><a class="dropdown-item" href="{{ url_for('logout') }}">Logout</a></li>
                         </ul>

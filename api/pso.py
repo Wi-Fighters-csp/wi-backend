@@ -16,6 +16,30 @@ api = Api(pso_api)
 
 
 class PSOAPI:
+    @staticmethod
+    def _normalize_signup_identity(body):
+        raw_uid = (
+            body.get('uid')
+            or body.get('username')
+            or body.get('userId')
+            or body.get('user_id')
+            or body.get('login')
+        )
+        raw_email = body.get('email')
+
+        normalized_uid = str(raw_uid or '').strip()
+        normalized_email = str(raw_email or '').strip().lower()
+
+        # Support clients that send email in the uid/username field.
+        if not normalized_email and '@' in normalized_uid:
+            normalized_email = normalized_uid.lower()
+
+        # For new signups, allow email to be the primary identifier.
+        if not normalized_uid and normalized_email:
+            normalized_uid = normalized_email
+
+        return normalized_uid, normalized_email
+
     class _AdminMixin:
         @staticmethod
         def require_admin(user):
@@ -37,13 +61,15 @@ class PSOAPI:
                     'error': 'Bad request'
                 }, 400
 
-            uid = (
-                body.get('uid')
-                or body.get('username')
-                or body.get('userId')
-                or body.get('user_id')
-                or body.get('login')
-            )
+            uid, email = PSOAPI._normalize_signup_identity(body)
+
+            if not email:
+                return {
+                    'message': 'Email is required for signup',
+                    'data': None,
+                    'error': 'Bad request'
+                }, 400
+
             name = (
                 body.get('name')
                 or body.get('full_name')
@@ -52,9 +78,6 @@ class PSOAPI:
                 or body.get('displayName')
                 or uid
             )
-            email = body.get('email')
-            if not email and uid:
-                email = PSOAuthService.default_email_for_uid(uid)
 
             password = (
                 body.get('password')
@@ -89,12 +112,13 @@ class PSOAPI:
                 }, 400
 
             identifier = (
+                body.get('email')
+                or
                 body.get('uid')
                 or body.get('username')
                 or body.get('userId')
                 or body.get('user_id')
                 or body.get('login')
-                or body.get('email')
                 or body.get('name')
             )
 

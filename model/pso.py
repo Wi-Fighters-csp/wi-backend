@@ -30,7 +30,7 @@ class PSOUser:
     def read(self):
         return {
             'id': self.id,
-            'uid': self.uid,
+            'uid': self.email,
             'name': self.name,
             'email': self.email,
             'role': self.role
@@ -63,6 +63,14 @@ class PSOAuthService:
         if len(email) >= 3 and '@' in email and email != '?':
             return email
         return PSOAuthService.default_email_for_uid(user.uid)
+
+    @staticmethod
+    def email_identifier_payload(payload):
+        normalized_payload = dict(payload or {})
+        email = str(normalized_payload.get('email') or '').strip().lower()
+        if email and 'uid' in normalized_payload:
+            normalized_payload['uid'] = email
+        return normalized_payload
 
     @staticmethod
     def normalize_practice_time(practice_time):
@@ -745,7 +753,7 @@ class PSOAuthService:
                 '''
             ).fetchall()
 
-        return [dict(record) for record in records]
+        return [PSOAuthService.email_identifier_payload(dict(record)) for record in records]
 
     @staticmethod
     def list_admins():
@@ -760,7 +768,7 @@ class PSOAuthService:
                 '''
             ).fetchall()
 
-        return [dict(record) for record in records]
+        return [PSOAuthService.email_identifier_payload(dict(record)) for record in records]
 
     @staticmethod
     def update_pso_user(uid, body):
@@ -1003,7 +1011,7 @@ class PSOAuthService:
     def signup_payload(user):
         return {
             'message': 'Signup successful',
-            'uid': user.uid,
+            'uid': user.email,
             'name': user.name,
             'email': user.email,
             'role': user.role,
@@ -1014,7 +1022,7 @@ class PSOAuthService:
     def login_payload(user):
         return {
             'message': 'Login successful',
-            'uid': user.uid,
+            'uid': user.email,
             'name': user.name,
             'email': user.email,
             'role': user.role,
@@ -1025,13 +1033,13 @@ class PSOAuthService:
     def logout_payload(user):
         return {
             'message': 'Logout successful',
-            'uid': user.uid
+            'uid': user.email
         }
 
     @staticmethod
     def current_user_payload(user):
         return {
-            'uid': user.uid,
+            'uid': user.email,
             'name': user.name,
             'email': user.email,
             'role': user.role,
@@ -1056,7 +1064,7 @@ class PSOAuthService:
         if record is None:
             return None
 
-        return dict(record)
+        return PSOAuthService.email_identifier_payload(dict(record))
 
     @staticmethod
     def is_member(uid):
@@ -1083,7 +1091,7 @@ class PSOAuthService:
         if record is None:
             return None
 
-        return dict(record)
+        return PSOAuthService.email_identifier_payload(dict(record))
 
     @staticmethod
     def get_latest_member_request(uid):
@@ -1108,7 +1116,7 @@ class PSOAuthService:
         if record is None:
             return None
 
-        return dict(record)
+        return PSOAuthService.email_identifier_payload(dict(record))
 
     @staticmethod
     def get_member_request_status(uid):
@@ -1383,7 +1391,7 @@ class PSOAuthService:
         with PSOAuthService.get_connection() as connection:
             records = connection.execute(query, tuple(parameters)).fetchall()
 
-        return [dict(record) for record in records]
+        return [PSOAuthService.email_identifier_payload(dict(record)) for record in records]
 
     @staticmethod
     def get_admin_member_request_detail(request_id):
@@ -1482,7 +1490,7 @@ class PSOAuthService:
                 '''
             ).fetchall()
 
-        return [dict(record) for record in records]
+        return [PSOAuthService.email_identifier_payload(dict(record)) for record in records]
 
     @staticmethod
     def list_member_cards(current_user=None, family=None, section_id=None):
@@ -1549,7 +1557,7 @@ class PSOAuthService:
 
             leaderboard.append({
                 'rank': index,
-                'uid': record['uid'],
+                'uid': record['email'],
                 'name': record['name'],
                 'email': record['email'],
                 'role': record['role'],
@@ -1662,7 +1670,7 @@ class PSOAuthService:
         target_member = PSOAuthService.get_member_by_uid(target_uid)
 
         return {
-            'uid': target_uid,
+            'uid': target_user.email,
             'name': target_user.name,
             'email': target_user.email,
             'role': target_user.role,
@@ -1713,7 +1721,7 @@ class PSOAuthService:
         output = []
         for record in records:
             output.append({
-                'uid': record['uid'],
+                'uid': record['email'],
                 'name': record['name'],
                 'email': record['email'],
                 'role': record['role'],

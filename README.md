@@ -1,14 +1,9 @@
 # README
 
-> This is a project to support AP Computer Science Principles (APCSP) as well as a UC articulated Data Structures course. It was crafted iteratively starting in 2020 to the present time.  The primary purposes are ...
+> This is the backend project for the Poway Symphony Orchestra prototype page depicted in the wi-pages repository. The backend supports this by:
+- having a variety of APIs, such as for logging in, chatting with admin, creating and storing member cards, and more, to support the functionality of the website.
 
-- Used as starter code for student projects for `AP CSP 1 and 2` and `Data Structures 1` curriculum.
-- Used to teach key principles in learning the Python Flask programming environment.
-- Used as a backend server to service API's in a frontend-to-backend pipeline. Review the `api` folder in the project for endpoints.
-- Contains a minimal frontend, mostly to support Administrative functionality using the `templates` folder and `Jinja2` to define UIs.
-- Contains SQL database code in the `model` folder to introduce concepts of persistent data and storage.  Perisistence folder is `instance/volumes` for generated SQLite3 db.
-- Contains capabilities for deployment and has been used with AWS, Ubuntu, Docker, docker-compose, and Nginx to `deploy a WSGI server`.
-- Contains APIs to support `user authentication and cookies`, a great deal of which was contributed by Aiden Wu a former student in CSP.  
+Template from Open Coding Society, expanded upon for the needs of our project. 
 
 ## Flask Portfolio Starter
 
